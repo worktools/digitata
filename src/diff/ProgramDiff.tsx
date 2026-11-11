@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProgramDiffResult } from "../../shared/types.ts";
-import { api } from "../api.ts";
+import { q as Q } from "../api.ts";
+import { useCached } from "../store.ts";
 import { parseTree, type Marker } from "./programTree.ts";
 
 const MARK_LABEL: Record<Marker, string> = { "+": "新增", "-": "删除", "~": "修改", "=": "未变" };
@@ -16,31 +16,18 @@ export interface ProgramDiffProps {
 }
 
 export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }: ProgramDiffProps) {
-  const [res, setRes] = useState<ProgramDiffResult | null>(null);
-  const [err, setErr] = useState("");
   const [showSame, setShowSame] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-
+  const qq = Q.programDiff(repo, num, path, baseSha, headSha);
+  const { data: res, error: err } = useCached(qq.key, qq.fetch, qq.opts);
+  const reported = useRef(false);
   useEffect(() => {
-    let live = true;
-    setRes(null);
-    setErr("");
-    api
-      .programDiff(repo, num, path, baseSha, headSha)
-      .then((r) => {
-        if (!live) return;
-        setRes(r);
-        if (!r.ok) onUnavailable?.(r.error ?? "program diff unavailable");
-      })
-      .catch((e: Error) => {
-        if (!live) return;
-        setErr(e.message);
-        onUnavailable?.(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [repo, num, path, baseSha, headSha]);
+    if (reported.current) return;
+    if (res && !res.ok) onUnavailable?.(res.error ?? "program diff unavailable");
+    else if (err) onUnavailable?.(err);
+    else return;
+    reported.current = true;
+  }, [res, err]);
 
   const parsed = useMemo(() => (res?.ok ? parseTree(res.tree) : null), [res]);
 

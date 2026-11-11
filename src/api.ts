@@ -29,3 +29,32 @@ export const api = {
       body: JSON.stringify(body),
     }),
 };
+
+// Cache keys and fetch options shared by views and hover prefetch.
+export const q = {
+  inbox: (filter: InboxFilter, query: string) => ({
+    key: `inbox:${filter}:${query}`,
+    fetch: () => api.inbox(filter, query),
+    opts: { label: "收件箱", persist: true, keepPrevious: true },
+  }),
+  list: (repo: string, state: string, query: string) => ({
+    key: `list:${repo}:${state}:${query}`,
+    fetch: () => api.listPRs(repo, state, query),
+    opts: { label: `${repo} PR 列表`, persist: true, keepPrevious: true },
+  }),
+  pr: (repo: string, num: number) => ({
+    key: `pr:${repo}#${num}`,
+    fetch: () => api.getPR(repo, num),
+    opts: { label: `#${num} 详情`, persist: true },
+  }),
+  diff: (repo: string, num: number) => ({
+    key: `diff:${repo}#${num}`,
+    fetch: () => api.getDiff(repo, num),
+    opts: { label: `#${num} diff` },
+  }),
+  programDiff: (repo: string, num: number, path: string, baseSha: string, head: string) => ({
+    key: `pd:${repo}:${path}:${baseSha}:${head}`,
+    fetch: () => api.programDiff(repo, num, path, baseSha, head),
+    opts: { label: `program diff ${path.split("/").pop()}`, persist: true, immutable: true },
+  }),
+};

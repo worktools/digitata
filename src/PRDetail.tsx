@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import type { PRDetail as Detail } from "../shared/types.ts";
-import { api } from "./api.ts";
+import { useMemo, useState } from "react";
+import type { PRSummary } from "../shared/types.ts";
+import { q as Q } from "./api.ts";
+import { summaryOf, useCached } from "./store.ts";
 import { FileDiff, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
 import { MergePanel } from "./MergePanel.tsx";
@@ -9,58 +10,60 @@ import { ChecksBadge, timeAgo } from "./PRList.tsx";
 type Tab = "files" | "overview" | "checks";
 
 export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; onChanged: () => void }) {
-  const [pr, setPr] = useState<Detail | null>(null);
-  const [patch, setPatch] = useState<FilePatch[] | null>(null);
-  const [err, setErr] = useState("");
   const [tab, setTab] = useState<Tab>("files");
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    setErr("");
-    api.getPR(repo, num).then((r) => live && setPr(r)).catch((e: Error) => live && setErr(e.message));
-    api
-      .getDiff(repo, num)
-      .then((t) => live && setPatch(parsePatch(t)))
-      .catch((e: Error) => live && setErr(e.message));
-    return () => {
-      live = false;
-    };
-  }, [repo, num, reload]);
-
+  const qp = Q.pr(repo, num);
+  const qd = Q.diff(repo, num);
+  const detail = useCached(qp.key, qp.fetch, qp.opts);
+  const diff = useCached(qd.key, qd.fetch, qd.opts);
+  const pr = detail.data;
+  // Until the full detail arrives, the row seen in the list gives an instant header.
+  const head: PRSummary | undefined = pr ?? summaryOf(repo, num);
+  const patch = useMemo(() => (diff.data !== undefined ? parsePatch(diff.data) : null), [diff.data]);
   const totalLines = useMemo(() => patch?.reduce((n, f) => n + f.additions + f.deletions, 0) ?? 0, [patch]);
+  const refreshAll = () => {
+    detail.refresh();
+    diff.refresh();
+  };
 
-  if (err && !pr) return <div className="error">{err}</div>;
-  if (!pr) return <div className="loading">加载 PR #{num}…</div>;
+  if (!head) {
+    if (detail.error) return <div className="error">{detail.error}</div>;
+    return <div className="loading">加载 PR #{num}…</div>;
+  }
 
   return (
     <div className="pr-detail">
       <header className="pr-head">
         <h2>
-          {pr.title} <span className="muted">#{pr.number}</span>
+          {head.title} <span className="muted">#{head.number}</span>
         </h2>
         <div className="pr-sub">
-          <span className={`tag st-${pr.state}`}>{pr.isDraft ? "DRAFT" : pr.state}</span>
+          <span className={`tag st-${head.state}`}>{head.isDraft ? "DRAFT" : head.state}</span>
           <span>
-            <b>{pr.author}</b> 想把 <code>{pr.headRefName}</code> 合入 <code>{pr.baseRefName}</code>
+            <b>{head.author}</b> 想把 <code>{head.headRefName}</code> 合入 <code>{head.baseRefName}</code>
           </span>
-          <span className="muted">更新于 {timeAgo(pr.updatedAt)}</span>
-          <a href={pr.url} target="_blank" rel="noreferrer">
+          <span className="muted">更新于 {timeAgo(head.updatedAt)}</span>
+          <a href={head.url} target="_blank" rel="noreferrer">
             在 GitHub 打开 ↗
           </a>
-          <button className="link" onClick={() => setReload((x) => x + 1)}>
+          <button className="link" onClick={refreshAll}>
             刷新
           </button>
         </div>
-        <MergePanel
-          repo={repo}
-          pr={pr}
-          onMerged={() => {
-            setReload((x) => x + 1);
-            onChanged();
-          }}
-        />
+        {pr ? (
+          <MergePanel
+            repo={repo}
+            pr={pr}
+            onMerged={() => {
+              refreshAll();
+              onChanged();
+            }}
+          />
+        ) : (
+          <div className="merge-panel muted">{detail.error ? <span className="error">{detail.error}</span> : "正在获取合并状态…"}</div>
+        )}
       </header>
+      {!pr ? null : (
+      <>
       <nav className="tabs">
         <button className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>
           文件 {pr.changedFiles}
@@ -106,7 +109,7 @@ export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; 
       )}
       {tab === "files" && (
         <div className="files">
-          {!patch && <div className="loading">加载 diff…</div>}
+          {!patch && (diff.error ? <div className="error">{diff.error}</div> : <div className="loading">加载 diff…</div>)}
           {patch && (
             <>
               <ul className="file-index">
@@ -133,6 +136,8 @@ export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; 
             </>
           )}
         </div>
+      )}
+      </>
       )}
     </div>
   );

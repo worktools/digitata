@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ActivityIndicator } from "./Activity.tsx";
 import { PRDetail } from "./PRDetail.tsx";
 import { InboxList, PRList } from "./PRList.tsx";
 
@@ -98,6 +99,7 @@ export function App() {
           <div className="empty big">从左侧选择一个 PR</div>
         )}
       </main>
+      <ActivityIndicator />
     </div>
   );
 }

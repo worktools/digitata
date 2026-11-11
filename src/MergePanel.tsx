@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MergeMethod, PRDetail } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ChecksBadge } from "./PRList.tsx";
@@ -13,6 +13,23 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const confirmBtn = useRef<HTMLButtonElement>(null);
+  const busyRef = useRef(false);
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
+
+  // Keyboard: "m" opens the dialog; inside it Enter merges, Esc cancels,
+  // "a" acknowledges warnings, 1/2/3 pick the method, "d" toggles branch deletion.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keyHandler.current(e);
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+
+  useEffect(() => {
+    if (confirming) confirmBtn.current?.focus();
+  }, [confirming, ack]);
+
+  keyHandler.current = () => {};
   if (pr.state !== "OPEN") return <div className={`merge-panel done st-${pr.state}`}>此 PR 状态：{pr.state}</div>;
 
   const warnings: string[] = [];
@@ -25,6 +42,9 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
   const needsAck = warnings.length > 0;
 
   const doMerge = async () => {
+    // Ref guard: Enter on the focused button and the key handler must never both merge.
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setResult(null);
     try {
@@ -36,8 +56,39 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message });
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
+  };
+
+  const canMerge = !busy && (!needsAck || ack);
+  const methods = Object.keys(METHOD_LABEL) as MergeMethod[];
+  keyHandler.current = (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target as HTMLElement;
+    const typing = t.tagName === "INPUT" && (t as HTMLInputElement).type !== "checkbox" || t.tagName === "TEXTAREA" || t.tagName === "SELECT";
+    if (!confirming) {
+      if (e.key === "m" && !typing) {
+        e.preventDefault();
+        setConfirming(true);
+        setAck(false);
+        setResult(null);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      if (!busy) setConfirming(false);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (canMerge) doMerge();
+    } else if (e.key === "a" && needsAck) {
+      setAck((x) => !x);
+    } else if (e.key === "d") {
+      setDeleteBranch((x) => !x);
+    } else if (["1", "2", "3"].includes(e.key)) {
+      setMethod(methods[Number(e.key) - 1]);
+    } else return;
+    e.stopPropagation();
   };
 
   return (
@@ -59,8 +110,8 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
         <label>
           <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 删除远程分支
         </label>
-        <button className={`primary ${needsAck ? "warn" : ""}`} onClick={() => { setConfirming(true); setAck(false); }}>
-          合并…
+        <button className={`primary ${needsAck ? "warn" : ""}`} onClick={() => { setConfirming(true); setAck(false); setResult(null); }}>
+          合并… <kbd>M</kbd>
         </button>
       </div>
       {result && <div className={result.ok ? "ok" : "error"}>{result.text}</div>}
@@ -74,7 +125,19 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
               <li>
                 {pr.headRefName} → {pr.baseRefName}
               </li>
-              <li>方式：{METHOD_LABEL[method]}{deleteBranch ? "，合并后删除分支" : ""}</li>
+              <li>
+                方式：
+                {methods.map((m, i) => (
+                  <button key={m} className={`chip ${m === method ? "on" : ""}`} onClick={() => setMethod(m)}>
+                    <kbd>{i + 1}</kbd> {METHOD_LABEL[m]}
+                  </button>
+                ))}
+              </li>
+              <li>
+                <label>
+                  <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 合并后删除远程分支 <kbd>D</kbd>
+                </label>
+              </li>
               <li>
                 head：<code>{pr.headRefOid.slice(0, 10)}</code>（若 PR 在此之后有新提交，合并会被拒绝）
               </li>
@@ -99,16 +162,16 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
                   <div key={w}>⚠ {w}</div>
                 ))}
                 <label>
-                  <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 我已知晓，仍然合并
+                  <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 我已知晓，仍然合并 <kbd>A</kbd>
                 </label>
               </div>
             )}
             <div className="modal-actions">
               <button onClick={() => setConfirming(false)} disabled={busy}>
-                取消
+                取消 <kbd>Esc</kbd>
               </button>
-              <button className="primary" disabled={busy || (needsAck && !ack)} onClick={doMerge}>
-                {busy ? "合并中…" : "确认合并"}
+              <button ref={confirmBtn} className="primary" disabled={!canMerge} onClick={doMerge}>
+                {busy ? "合并中…" : "确认合并"} <kbd>Enter</kbd>
               </button>
             </div>
             {result && !result.ok && <div className="error">{result.text}</div>}

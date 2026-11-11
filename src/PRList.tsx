@@ -1,6 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChecksSummary, InboxFilter, PRSummary } from "../shared/types.ts";
-import { api } from "./api.ts";
+import { q as Q } from "./api.ts";
+import { prefetch, rememberSummaries, useCached } from "./store.ts";
+
+/** Refresh when reloadKey bumps (after a merge), but not on mount. */
+function useReload(reloadKey: number, refresh: () => void) {
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    refresh();
+  }, [reloadKey]);
+}
+
+/** Hovering a row warms the detail and diff caches so opening it is instant. */
+function hoverPrefetch(repo: string, num: number) {
+  const a = Q.pr(repo, num);
+  const b = Q.diff(repo, num);
+  prefetch(a.key, a.fetch, a.opts);
+  prefetch(b.key, b.fetch, b.opts);
+}
 
 export function ChecksBadge({ checks }: { checks: ChecksSummary }) {
   if (checks.state === "none") return <span className="ci ci-none">无 CI</span>;
@@ -30,21 +51,10 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
   const [state, setState] = useState("open");
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const [prs, setPrs] = useState<PRSummary[] | null>(null);
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    let live = true;
-    setPrs(null);
-    setErr("");
-    api
-      .listPRs(repo, state, query)
-      .then((r) => live && setPrs(r))
-      .catch((e: Error) => live && setErr(e.message));
-    return () => {
-      live = false;
-    };
-  }, [repo, state, query, reloadKey]);
+  const src = Q.list(repo, state, query);
+  const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
+  useReload(reloadKey, refresh);
+  useEffect(() => prs && rememberSummaries(repo, prs), [prs]);
 
   return (
     <div className="pr-list">
@@ -64,21 +74,28 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
           <input placeholder="搜索（GitHub 语法，如 author:@me）" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
       </div>
-      {err && <div className="error">{err}</div>}
+      {err && !prs && <div className="error">{err}</div>}
       {!prs && !err && <div className="loading">加载中…</div>}
       {prs && prs.length === 0 && <div className="empty">没有 PR</div>}
-      <ul>
+      <ul className={stale ? "stale" : ""}>
         {prs?.map((pr) => (
-          <PRRow key={pr.url} pr={pr} selected={pr.number === selected} onSelect={() => onSelect(pr.number)} />
+          <PRRow key={pr.url} pr={pr} selected={pr.number === selected} onSelect={() => onSelect(pr.number)} onHover={() => hoverPrefetch(repo, pr.number)} />
         ))}
       </ul>
     </div>
   );
 }
 
-export function PRRow({ pr, selected, onSelect, showRepo }: { pr: PRSummary; selected: boolean; onSelect: () => void; showRepo?: boolean }) {
+export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () => void; onHover?: () => void; showRepo?: boolean }) {
+  const { pr, selected, onSelect, onHover, showRepo } = props;
+  const timer = useRef(0);
   return (
-    <li className={selected ? "sel" : ""} onClick={onSelect}>
+    <li
+      className={selected ? "sel" : ""}
+      onClick={onSelect}
+      onMouseEnter={() => onHover && (timer.current = window.setTimeout(onHover, 150))}
+      onMouseLeave={() => clearTimeout(timer.current)}
+    >
       {showRepo && pr.repo && <div className="row0">{pr.repo}</div>}
       <div className="row1">
         <span className="num">#{pr.number}</span>
@@ -115,22 +132,11 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
   const [readyOnly, setReadyOnly] = useState(false);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const [prs, setPrs] = useState<PRSummary[] | null>(null);
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    let live = true;
-    setErr("");
-    setPrs(null);
-    localStorage.setItem("digitata.inbox", filter);
-    api
-      .inbox(filter, query)
-      .then((r) => live && setPrs(r))
-      .catch((e: Error) => live && setErr(e.message));
-    return () => {
-      live = false;
-    };
-  }, [filter, query, reloadKey]);
+  const src = Q.inbox(filter, query);
+  const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
+  useReload(reloadKey, refresh);
+  useEffect(() => prs && rememberSummaries(null, prs), [prs]);
+  useEffect(() => localStorage.setItem("digitata.inbox", filter), [filter]);
 
   const shown = prs?.filter((p) => !readyOnly || isReady(p));
   const readyCount = prs?.filter(isReady).length ?? 0;
@@ -157,13 +163,27 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
           <input type="checkbox" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} /> 可合并 {prs ? readyCount : ""}
         </label>
       </div>
-      {err && <div className="error">{err}</div>}
+      {err && !prs && <div className="error">{err}</div>}
       {!prs && !err && <div className="loading">加载中…</div>}
       {shown && shown.length === 0 && <div className="empty">没有 PR</div>}
-      {prs && <div className="count muted">{shown!.length} 个 PR</div>}
-      <ul>
+      {prs && (
+        <div className="count muted">
+          {shown!.length} 个 PR
+          <button className="link" onClick={refresh}>
+            刷新
+          </button>
+        </div>
+      )}
+      <ul className={stale ? "stale" : ""}>
         {shown?.map((pr) => (
-          <PRRow key={pr.url} pr={pr} showRepo selected={`${pr.repo}#${pr.number}` === selected} onSelect={() => onSelect(pr.repo!, pr.number)} />
+          <PRRow
+            key={pr.url}
+            pr={pr}
+            showRepo
+            selected={`${pr.repo}#${pr.number}` === selected}
+            onSelect={() => onSelect(pr.repo!, pr.number)}
+            onHover={() => hoverPrefetch(pr.repo!, pr.number)}
+          />
         ))}
       </ul>
     </div>
