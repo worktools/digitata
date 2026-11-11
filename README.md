@@ -6,6 +6,12 @@
 `calcit analyze program-diff --base <merge-base> <head>`，按 ns → def 列出新增 / 删除 / 修改的定义，
 并把修改的定义渲染成 Cirru 缩进树，旧/新子树分别高亮。
 
+## 收件箱
+
+默认打开的是跨仓库收件箱（类似 https://github.com/pulls ），列出所有和你有关的 open PR：我创建的、请求我 review、指派给我、提到我；“全部”是前三者合并去重。
+勾选“可合并”只显示非草稿、CI 未失败/未在运行、没有被要求修改的 PR。附加搜索框接受 GitHub 搜索语法（如 `org:calcit-lang`）。
+数据来自一次 `gh api graphql` search，顺带拿到每个 PR 的 CI 计数。也可以在侧栏固定单个仓库查看其 PR 列表。
+
 ## 运行
 
 需要 Node 24+（直接运行 `.ts`）、`gh`（已 `gh auth login`）、`calcit`（program diff 用）。
@@ -23,7 +29,7 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 
 ## 结构
 
-- `server/host.ts`：`CodeHost` 接口（`listPRs` / `getPR` / `getDiff` / `merge`）。
+- `server/host.ts`：`CodeHost` 接口（`inbox` / `listPRs` / `getPR` / `getDiff` / `merge`）。
 - `server/gh.ts`：基于 `gh pr list/view --json`、`gh pr diff`、`gh pr merge` 的实现。以后换成直接调 REST/GraphQL 只需另写一个实现。
 - `server/calcit.ts`：为每个仓库维护一个 blobless clone，fetch `refs/pull/N/head`，在 merge-base 和 head 之间跑 program diff（同一仓库串行）。
 - `server/main.ts`：只监听 `127.0.0.1` 的薄 HTTP 层，拒绝非 localhost 的 Origin。

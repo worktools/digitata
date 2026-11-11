@@ -2,7 +2,7 @@
 // gh CLI (server/gh.ts); a direct REST/GraphQL implementation can replace it
 // without touching the routes or the UI.
 
-import type { MergeRequest, PRDetail, PRSummary } from "../shared/types.ts";
+import type { InboxFilter, MergeRequest, PRDetail, PRSummary } from "../shared/types.ts";
 
 export interface ListOptions {
   state?: "open" | "closed" | "merged" | "all";
@@ -11,6 +11,8 @@ export interface ListOptions {
 }
 
 export interface CodeHost {
+  /** Open PRs across all repos that involve the viewer (like github.com/pulls). */
+  inbox(filter: InboxFilter, extra?: string): Promise<PRSummary[]>;
   listPRs(repo: string, opts?: ListOptions): Promise<PRSummary[]>;
   getPR(repo: string, num: number): Promise<PRDetail>;
   /** Unified diff (git patch format) of the whole PR. */

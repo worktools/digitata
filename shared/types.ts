@@ -20,6 +20,8 @@ export interface ChecksSummary {
 }
 
 export interface PRSummary {
+  /** owner/name; always set by the inbox, which spans repos. */
+  repo?: string;
   number: number;
   title: string;
   author: string;
@@ -81,3 +83,6 @@ export interface ProgramDiffResult {
   notes: string[];
   error?: string;
 }
+
+/** Inbox filters, mirroring github.com/pulls: authored, review requested, assigned. */
+export type InboxFilter = "all" | "author" | "review" | "assignee" | "mentioned";

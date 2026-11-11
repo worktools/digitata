@@ -5,7 +5,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MergeRequest } from "../shared/types.ts";
+import type { InboxFilter, MergeRequest } from "../shared/types.ts";
 import { programDiff } from "./calcit.ts";
 import { GhCliHost } from "./gh.ts";
 import type { CodeHost } from "./host.ts";
@@ -45,6 +45,11 @@ const server = createServer(async (req, res) => {
   if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return send(res, 403, { error: "forbidden origin" });
   if (!url.pathname.startsWith("/api/")) return serveStatic(url.pathname, res);
   try {
+    if (url.pathname === "/api/inbox" && req.method === "GET") {
+      const filter = (url.searchParams.get("filter") ?? "all") as InboxFilter;
+      if (!["all", "author", "review", "assignee", "mentioned"].includes(filter)) return send(res, 400, { error: "bad filter" });
+      return send(res, 200, await host.inbox(filter, url.searchParams.get("q") ?? ""));
+    }
     const m = ROUTE.exec(url.pathname);
     if (!m) return send(res, 404, { error: "not found" });
     const repo = `${m[1]}/${m[2]}`;

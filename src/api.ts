@@ -1,4 +1,4 @@
-import type { MergeRequest, PRDetail, PRSummary, ProgramDiffResult } from "../shared/types.ts";
+import type { InboxFilter, MergeRequest, PRDetail, PRSummary, ProgramDiffResult } from "../shared/types.ts";
 
 async function req<T>(url: string, init?: RequestInit, as: "json" | "text" = "json"): Promise<T> {
   const r = await fetch(url, init);
@@ -15,6 +15,7 @@ async function req<T>(url: string, init?: RequestInit, as: "json" | "text" = "js
 const base = (repo: string) => `/api/repos/${repo}/pulls`;
 
 export const api = {
+  inbox: (filter: InboxFilter, q: string) => req<PRSummary[]>(`/api/inbox?${new URLSearchParams({ filter, q })}`),
   listPRs: (repo: string, state: string, q: string) =>
     req<PRSummary[]>(`${base(repo)}?${new URLSearchParams({ state, q })}`),
   getPR: (repo: string, num: number) => req<PRDetail>(`${base(repo)}/${num}`),

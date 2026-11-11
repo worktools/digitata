@@ -29,7 +29,7 @@ export function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs
 export async function runOk(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<string> {
   const r = await run(cmd, args, opts);
   if (r.code !== 0) {
-    throw new Error(`${cmd} ${args.join(" ")} failed (${r.code}): ${r.stderr.trim() || r.stdout.trim()}`);
+    throw new Error(`${cmd} ${args.slice(0, 3).join(" ")} failed (${r.code}): ${r.stderr.trim() || r.stdout.trim()}`);
   }
   return r.stdout;
 }

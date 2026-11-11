@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PRDetail } from "./PRDetail.tsx";
-import { PRList } from "./PRList.tsx";
+import { InboxList, PRList } from "./PRList.tsx";
 
 const DEFAULT_REPOS = ["calcit-lang/calcit"];
 
@@ -23,7 +23,14 @@ export function App() {
   const [repos, setRepos] = useState(loadRepos);
   const [draft, setDraft] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const repo = route.repo ?? repos[0];
+  // Sidebar source: the cross-repo inbox (default) or one repo's PR list.
+  const [source, setSource] = useState<string>(() => localStorage.getItem("digitata.source") ?? "inbox");
+  const repo = route.repo ?? (source === "inbox" ? repos[0] : source);
+  const listRepo = source === "inbox" ? null : source;
+
+  useEffect(() => {
+    localStorage.setItem("digitata.source", source);
+  }, [source]);
 
   useEffect(() => {
     const on = () => setRoute(parseHash());
@@ -31,11 +38,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", on);
   }, []);
 
-  // A repo opened by URL joins the sidebar list.
-  useEffect(() => {
-    if (route.repo && !repos.includes(route.repo)) setRepos((rs) => [...rs, route.repo!]);
-  }, [route.repo]);
-
+  // Pinned repos persist across reloads.
   useEffect(() => {
     localStorage.setItem("digitata.repos", JSON.stringify(repos));
   }, [repos]);
@@ -50,7 +53,7 @@ export function App() {
     if (!/^[\w.-]+\/[\w.-]+$/.test(r)) return;
     if (!repos.includes(r)) setRepos([...repos, r]);
     setDraft("");
-    go(r);
+    setSource(r);
   };
 
   return (
@@ -58,11 +61,21 @@ export function App() {
       <aside>
         <div className="brand">Digitata</div>
         <div className="repos">
+          <div className={`repo ${source === "inbox" ? "on" : ""}`}>
+            <button onClick={() => setSource("inbox")}>📥 收件箱（所有仓库）</button>
+          </div>
           {repos.map((r) => (
-            <div key={r} className={`repo ${r === repo ? "on" : ""}`}>
-              <button onClick={() => go(r)}>{r}</button>
-              {repos.length > 1 && (
-                <button className="x" title="移除" onClick={() => setRepos(repos.filter((x) => x !== r))}>
+            <div key={r} className={`repo ${r === source ? "on" : ""}`}>
+              <button onClick={() => setSource(r)}>{r}</button>
+              {repos.length > 0 && (
+                <button
+                  className="x"
+                  title="移除"
+                  onClick={() => {
+                    setRepos(repos.filter((x) => x !== r));
+                    if (source === r) setSource("inbox");
+                  }}
+                >
                   ×
                 </button>
               )}
@@ -72,10 +85,14 @@ export function App() {
             <input placeholder="添加 owner/repo" value={draft} onChange={(e) => setDraft(e.target.value)} />
           </form>
         </div>
-        <PRList repo={repo} selected={route.num} onSelect={(n) => go(repo, n)} reloadKey={reloadKey} />
+        {listRepo ? (
+          <PRList repo={listRepo} selected={route.repo === listRepo ? route.num : undefined} onSelect={(n) => go(listRepo, n)} reloadKey={reloadKey} />
+        ) : (
+          <InboxList selected={route.repo && route.num ? `${route.repo}#${route.num}` : undefined} onSelect={(r, n) => go(r, n)} reloadKey={reloadKey} />
+        )}
       </aside>
       <main>
-        {route.num ? (
+        {route.num && route.repo ? (
           <PRDetail key={`${repo}#${route.num}`} repo={repo} num={route.num} onChanged={() => setReloadKey((k) => k + 1)} />
         ) : (
           <div className="empty big">从左侧选择一个 PR</div>
