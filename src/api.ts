@@ -15,6 +15,7 @@ async function req<T>(url: string, init?: RequestInit, as: "json" | "text" = "js
 const base = (repo: string) => `/api/repos/${repo}/pulls`;
 
 export const api = {
+  viewer: () => req<{ login: string }>("/api/viewer"),
   inbox: (filter: InboxFilter, q: string) => req<PRSummary[]>(`/api/inbox?${new URLSearchParams({ filter, q })}`),
   listPRs: (repo: string, state: string, q: string) =>
     req<PRSummary[]>(`${base(repo)}?${new URLSearchParams({ state, q })}`),
@@ -32,6 +33,7 @@ export const api = {
 
 // Cache keys and fetch options shared by views and hover prefetch.
 export const q = {
+  viewer: () => ({ key: "viewer", fetch: api.viewer, opts: { label: "账号", persist: true, immutable: true } }),
   inbox: (filter: InboxFilter, query: string) => ({
     key: `inbox2:${filter}:${query}`,
     fetch: () => api.inbox(filter, query),

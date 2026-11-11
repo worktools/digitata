@@ -6,7 +6,7 @@ import { FileDiff, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
 import { FileIndex } from "./FileIndex.tsx";
 import { MergePanel } from "./MergePanel.tsx";
-import { ChecksBadge, timeAgo } from "./PRList.tsx";
+import { age, ChecksBadge, timeAgo, useViewer } from "./PRList.tsx";
 
 type Tab = "files" | "overview" | "checks";
 
@@ -17,6 +17,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
   const detail = useCached(qp.key, qp.fetch, qp.opts);
   const diff = useCached(qd.key, qd.fetch, qd.opts);
   const pr = detail.data;
+  const viewer = useViewer();
   // Until the full detail arrives, the row seen in the list gives an instant header.
   const head: PRSummary | undefined = pr ?? summaryOf(repo, num);
   const patch = useMemo(() => (diff.data !== undefined ? parsePatch(diff.data) : null), [diff.data]);
@@ -41,13 +42,17 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
           {head.title} <span className="muted">#{head.number}</span>
         </h2>
         <div className="pr-sub">
-          <span className={`tag st-${head.state}`}>{head.isDraft ? "DRAFT" : head.state}</span>
-          <span>
-            <b>{head.author}</b> 想把 <code>{head.headRefName}</code> 合入 <code>{head.baseRefName}</code>
+          {head.state !== "OPEN" && <span className={`tag st-${head.state}`}>{head.state}</span>}
+          <span className="repo-chip">{repo}</span>
+          <span className="branch">
+            <code>{head.headRefName}</code> → <code>{head.baseRefName}</code>
           </span>
-          <span className="muted">更新于 {timeAgo(head.updatedAt)}</span>
+          {viewer && head.author !== viewer && <span className="who">@{head.author}</span>}
+          <span className="muted" title={`更新于 ${timeAgo(head.updatedAt)}`}>
+            {age(head.createdAt ?? head.updatedAt)}
+          </span>
           <a href={head.url} target="_blank" rel="noreferrer">
-            在 GitHub 打开 ↗
+            GitHub ↗
           </a>
           <button className="link" onClick={refreshAll}>
             刷新

@@ -17,6 +17,7 @@ const SUMMARY_FIELDS = [
   "isDraft",
   "state",
   "updatedAt",
+  "createdAt",
   "reviewDecision",
   "additions",
   "deletions",
@@ -80,6 +81,7 @@ function toSummary(raw: Json): PRSummary & { _checks: Check[] } {
     isDraft: !!raw.isDraft,
     state: raw.state,
     updatedAt: raw.updatedAt,
+    createdAt: raw.createdAt,
     reviewDecision: raw.reviewDecision ?? "",
     additions: raw.additions ?? 0,
     deletions: raw.deletions ?? 0,
@@ -165,6 +167,12 @@ function searchNodeToSummary(n: Json): PRSummary {
 }
 
 export class GhCliHost implements CodeHost {
+  private login?: Promise<string>;
+  viewer(): Promise<string> {
+    this.login ??= gh(["api", "user", "--jq", ".login"]).then((s) => s.trim());
+    return this.login;
+  }
+
   async inbox(filter: InboxFilter, extra = ""): Promise<PRSummary[]> {
     // GitHub search has no OR across qualifiers, so "all" runs one search per qualifier and merges.
     const quals = filter === "all" ? ["author", "review", "assignee"] as const : [filter];

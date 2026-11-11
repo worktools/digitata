@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MergeMethod, PRDetail } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { mergeKey, startMerge, useMerges } from "./store.ts";
-import { ChecksBadge } from "./PRList.tsx";
+import { ChecksBadge, prStatus } from "./PRList.tsx";
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: "Squash and merge", merge: "Merge commit", rebase: "Rebase and merge" };
 
@@ -58,6 +58,7 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
   if (pr.mergeStateStatus && !["CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(pr.mergeStateStatus)) warnings.push(`合并状态：${pr.mergeStateStatus}`);
   if (pr.reviewDecision === "CHANGES_REQUESTED") warnings.push("有 reviewer 要求修改");
   const needsAck = warnings.length > 0;
+  const status = prStatus(pr);
 
   // The merge runs in a global job, so the dialog closes at once and the user can
   // move on to other PRs; progress and the result show in the corner and the list.
@@ -101,16 +102,20 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
   return (
     <div className="merge-panel">
       {label}
-      <span className="merge-status" title={`mergeable: ${pr.mergeable || "?"} · state: ${pr.mergeStateStatus || "?"}${pr.reviewDecision ? ` · review: ${pr.reviewDecision}` : ""}`}>
-        <ChecksBadge checks={pr.checks} />
-        <span className={`tag ${needsAck ? "warn-tag" : ""}`}>{pr.mergeStateStatus || pr.mergeable || "?"}</span>
-        {pr.reviewDecision && <span className={`tag rv-${pr.reviewDecision}`}>{pr.reviewDecision.toLowerCase().replace("_", " ")}</span>}
-        {job?.state === "running" && <span className="tag merging">合并中，可先处理别的 PR</span>}
-        {job?.state === "failed" && (
-          <span className="tag merge-failed" title={job.text}>
-            上次合并失败
+      <span
+        className="merge-status"
+        title={`CI 成功 ${pr.checks.success} · 失败 ${pr.checks.failure} · 运行中 ${pr.checks.pending}\nmergeable: ${pr.mergeable || "?"} · state: ${pr.mergeStateStatus || "?"}${pr.reviewDecision ? ` · review: ${pr.reviewDecision}` : ""}`}
+      >
+        {job?.state === "running" ? (
+          <span className="pill pending big">合并中…</span>
+        ) : job?.state === "failed" ? (
+          <span className="pill failed big" title={job.text}>
+            合并失败
           </span>
+        ) : (
+          <span className={`pill big ${status.kind}`}>{status.label}</span>
         )}
+        {pr.reviewDecision === "APPROVED" && <span className="pill ready">✓ approved</span>}
       </span>
       <div className="merge-actions">
         <select value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>

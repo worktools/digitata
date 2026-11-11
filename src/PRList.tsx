@@ -47,6 +47,31 @@ export function timeAgo(iso: string) {
   return `${Math.floor(s / 86400)} 天前`;
 }
 
+/** Compact age for dense rows: 5m, 3h, 2d. */
+export function age(iso: string) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+export type StatusKind = "ready" | "pending" | "failed" | "blocked" | "draft" | "unknown";
+
+/** One merge-readiness verdict per PR, so the UI can show a single colour instead of several labels. */
+export function prStatus(pr: PRSummary & { mergeable?: string }): { kind: StatusKind; label: string } {
+  if (pr.isDraft) return { kind: "draft", label: "草稿" };
+  if (pr.mergeable === "CONFLICTING") return { kind: "blocked", label: "冲突" };
+  if (pr.checks.state === "failure") return { kind: "failed", label: `CI ${pr.checks.failure} 失败` };
+  if (pr.reviewDecision === "CHANGES_REQUESTED") return { kind: "blocked", label: "要求修改" };
+  if (pr.checks.state === "pending") return { kind: "pending", label: "CI 运行中" };
+  return { kind: "ready", label: pr.checks.state === "none" ? "可合并（无 CI）" : "可合并" };
+}
+
+export function useViewer() {
+  const v = Q.viewer();
+  return useCached(v.key, v.fetch, v.opts).data?.login;
+}
+
 export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; selected?: number; onSelect: (n: number) => void; reloadKey: number }) {
   const [state, setState] = useState("open");
   const [q, setQ] = useState("");
@@ -89,29 +114,30 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
 export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () => void; onHover?: () => void; showRepo?: boolean }) {
   const { pr, selected, onSelect, onHover, showRepo } = props;
   const timer = useRef(0);
+  const viewer = useViewer();
   const job = useMerges()[mergeKey(pr.repo ?? pr.url.split("/").slice(3, 5).join("/"), pr.number)];
+  const st = prStatus(pr);
+  const repoName = pr.repo?.split("/")[1];
   return (
     <li
-      className={`${selected ? "sel" : ""} ${job?.state === "done" ? "leaving" : ""}`}
+      className={`row st-${st.kind} ${selected ? "sel" : ""} ${job?.state === "done" ? "leaving" : ""}`}
       onClick={onSelect}
       onMouseEnter={() => onHover && (timer.current = window.setTimeout(onHover, 150))}
       onMouseLeave={() => clearTimeout(timer.current)}
+      title={`${pr.repo ?? ""}#${pr.number} · ${st.label}${pr.author !== viewer ? ` · ${pr.author}` : ""}`}
     >
-      {showRepo && pr.repo && <div className="row0">{pr.repo}</div>}
       <div className="row1">
-        <span className="num">#{pr.number}</span>
         <span className="title">{pr.title}</span>
       </div>
       <div className="row2">
-        {job?.state === "running" && <span className="tag merging">合并中…</span>}
-        {job?.state === "done" && <span className="tag merged-local">已合并</span>}
-        {job?.state === "failed" && <span className="tag merge-failed">合并失败</span>}
-        {pr.isDraft && <span className="tag draft">draft</span>}
-        <ChecksBadge checks={pr.checks} />
-        {pr.reviewDecision && <span className={`tag rv-${pr.reviewDecision}`}>{pr.reviewDecision.toLowerCase().replace("_", " ")}</span>}
-        <span className="muted">
-          {pr.author} · {pr.createdAt ? `创建于 ${timeAgo(pr.createdAt)}` : timeAgo(pr.updatedAt)}
-        </span>
+        {showRepo && repoName && <span className="repo-name">{repoName}</span>}
+        <span className="num">#{pr.number}</span>
+        <span className="age">{age(pr.createdAt ?? pr.updatedAt)}</span>
+        {viewer && pr.author !== viewer && <span className="who">@{pr.author}</span>}
+        {job?.state === "running" && <span className="pill pending">合并中</span>}
+        {job?.state === "failed" && <span className="pill failed">合并失败</span>}
+        {!job && st.kind !== "ready" && <span className={`pill ${st.kind}`}>{st.label}</span>}
+        {pr.reviewDecision === "APPROVED" && <span className="pill ready">✓ approved</span>}
         <span className="stat">
           <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
         </span>
@@ -168,7 +194,8 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
       {shown && shown.length === 0 && <div className="empty">没有待合并的 PR</div>}
       {shown && (
         <div className="count muted">
-          待合并 {shown.length} 个 · 最早的在上
+          {shown.length} 个待合并 · 最早在上 ·{" "}
+          <span className="add">{shown.filter((p) => prStatus(p).kind === "ready").length} 可合并</span>
           <button className="link" onClick={refresh}>
             刷新
           </button>

@@ -45,6 +45,7 @@ const server = createServer(async (req, res) => {
   if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return send(res, 403, { error: "forbidden origin" });
   if (!url.pathname.startsWith("/api/")) return serveStatic(url.pathname, res);
   try {
+    if (url.pathname === "/api/viewer") return send(res, 200, { login: await host.viewer() });
     if (url.pathname === "/api/inbox" && req.method === "GET") {
       const filter = (url.searchParams.get("filter") ?? "all") as InboxFilter;
       if (!["all", "author", "review", "assignee", "mentioned"].includes(filter)) return send(res, 400, { error: "bad filter" });

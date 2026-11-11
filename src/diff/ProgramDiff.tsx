@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { q as Q } from "../api.ts";
 import { useCached } from "../store.ts";
-import { parseTree, type Marker } from "./programTree.ts";
+import { parseTree, type Marker, type TreeLine } from "./programTree.ts";
 
-const MARK_LABEL: Record<Marker, string> = { "+": "新增", "-": "删除", "~": "修改", "=": "未变" };
 
 export interface ProgramDiffProps {
   repo: string;
@@ -39,95 +38,187 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
   const schemaOf = (def: string) => schemaMap.get(def);
 
   const jump = (id: number) => {
-    setShowSame(true);
     requestAnimationFrame(() => root.current?.querySelector(`[data-line="${id}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
 
+  const counts = parseCounts(res.meta.changes ?? "");
+  const cls = res.meta.classification ?? "";
+
   return (
     <div className="program-diff" ref={root}>
-      <div className="pd-meta">
-        <span className={`badge cls-${res.meta.classification ?? ""}`}>{res.meta.classification ?? "?"}</span>
-        <span>{res.meta.changes}</span>
-        {res.meta.categories && <span className="muted">{res.meta.categories}</span>}
+      <div className="pd-meta" title={res.meta.categories}>
+        <span className={`pill ${cls === "canonical-format-only" ? "ready" : cls === "semantic-change" ? "pending" : "unknown"}`}>{CLASS_LABEL[cls] ?? cls}</span>
+        {counts.mod > 0 && <span className="cnt mod">~{counts.mod}</span>}
+        {counts.add > 0 && <span className="cnt add">+{counts.add}</span>}
+        {counts.del > 0 && <span className="cnt del">−{counts.del}</span>}
+        <span className="spacer" />
+        <label className="toggle">
+          <input type="checkbox" checked={showSame} onChange={(e) => setShowSame(e.target.checked)} /> 完整树
+        </label>
       </div>
-      {res.widening && res.widening.length > 0 && (
-        <div className="warn-box">⚠ {res.widening.length} 处类型签名放宽（widening），调用方可能收到更宽的类型</div>
-      )}
+      {res.widening && res.widening.length > 0 && <div className="warn-box">⚠ {res.widening.length} 处类型放宽（widening）</div>}
       {(parsed.defs.length > 0 || parsed.nsChanges.length > 0) && (
-        <ul className="def-list">
-          {parsed.nsChanges.map((d) => (
-            <li key={`ns-${d.lineId}`} className={`mk mk-${mkClass(d.marker)}`} onClick={() => jump(d.lineId)}>
-              <span className="mk-label">{MARK_LABEL[d.marker]} ns</span> <code>{d.ns}</code>
-            </li>
-          ))}
-          {parsed.defs.map((d) => (
-            <li key={d.lineId} className={`mk mk-${mkClass(d.marker)}`} onClick={() => jump(d.lineId)}>
-              <span className="mk-label">{MARK_LABEL[d.marker]}</span>{" "}
-              <code>
-                <span className="muted">{d.ns}/</span>
-                {d.def}
-              </code>
-              {d.parts.length > 0 && <span className="muted parts"> {d.parts.join(", ")}</span>}
-              {schemaOf(`${d.ns}/${d.def}`) && <span className={`tag type-${schemaOf(`${d.ns}/${d.def}`)}`}>类型 {schemaOf(`${d.ns}/${d.def}`)}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {parsed.defs.length === 0 && parsed.nsChanges.length === 0 && <div className="empty">没有定义级改动（{res.meta.classification}）</div>}
-      <label className="toggle">
-        <input type="checkbox" checked={showSame} onChange={(e) => setShowSame(e.target.checked)} /> 显示未变更节点
-      </label>
-      <pre className="pd-tree">
-        {parsed.lines.map((l) => {
-          if (!showSame && l.marker === "=" && (l.depth ?? 0) >= 2) return null;
-          const cls = [
-            "pl",
-            l.marker ? `mk-${mkClass(l.marker)}` : "",
-            l.side ? `side-${l.side}` : "",
-            l.isSideHeader ? "side-header" : "",
-            l.same ? "same" : "",
-            l.segs ? "paired" : "",
-            l.marker && l.depth === 4 && l.path?.[2] === "defs" ? "def-node" : "",
-          ].join(" ");
-          if (l.change) {
-            const cont = l.prefix.replace(/[├└]── $/u, (m) => (m.startsWith("├") ? "│   " : "    ")) + "    ";
+        <div className="def-chips">
+          {[...parsed.nsChanges, ...parsed.defs].map((d) => {
+            const dir = schemaOf(`${d.ns}/${d.def}`);
             return (
-              <div key={l.id} data-line={l.id}>
-                <div className={cls}>
-                  <span className="tree-prefix">{l.prefix}</span>
-                  <span className="marker">~ </span>
-                  {l.change.key}
-                </div>
-                <div className="pl side-old paired wrap">
-                  <span className="tree-prefix">{cont}</span>− <Segs segs={l.change.old} />
-                </div>
-                <div className="pl side-new paired wrap">
-                  <span className="tree-prefix">{cont}</span>+ <Segs segs={l.change.new} />
-                </div>
-              </div>
+              <button key={d.lineId} className={`def-chip mk-${mkClass(d.marker)}`} onClick={() => jump(d.lineId)} title={`${d.ns}/${d.def} · ${d.parts.join(", ")}`}>
+                <span className="mk-glyph">{GLYPH[d.marker]}</span>
+                {d.def || d.ns}
+                {dir && <span className={`type-dot type-${dir}`} title={`类型 ${dir}`}>T</span>}
+              </button>
             );
-          }
-          return (
-            <div key={l.id} data-line={l.id} className={cls}>
-              <span className="tree-prefix">{l.prefix}</span>
-              {l.marker && <span className="marker">{l.marker} </span>}
-              {l.isSideHeader ? (
-                (l.side === "old" ? "− 旧 " : "+ 新 ") + l.text.trim()
-              ) : l.segs ? (
-                <Segs segs={l.segs} />
-              ) : (
-                l.text
-              )}
-            </div>
-          );
-        })}
-      </pre>
+          })}
+        </div>
+      )}
+      {parsed.defs.length === 0 && parsed.nsChanges.length === 0 && <div className="empty">没有定义级改动</div>}
+      {showSame ? <FullTree lines={parsed.lines} /> : <Blocks lines={parsed.lines} schemaOf={schemaOf} />}
       {res.notes.length > 0 && (
         <details className="notes">
-          <summary>CLI 输出备注（{res.notes.length}）</summary>
+          <summary>CLI 备注 {res.notes.length}</summary>
           <pre>{res.notes.join("\n")}</pre>
         </details>
       )}
+    </div>
+  );
+}
+
+const CLASS_LABEL: Record<string, string> = { "semantic-change": "语义改动", "canonical-format-only": "仅格式", "no-change": "无改动" };
+const GLYPH: Record<Marker, string> = { "~": "●", "+": "+", "-": "−", "=": "=" };
+
+function parseCounts(s: string) {
+  const n = (re: RegExp) => Number(re.exec(s)?.[1] ?? 0);
+  return { mod: n(/~(\d+)/), add: n(/\+(\d+)/), del: n(/-(\d+)/) };
+}
+
+function lineClass(l: TreeLine) {
+  return [
+    "pl",
+    l.marker ? `mk-${mkClass(l.marker)}` : "",
+    l.side ? `side-${l.side}` : "",
+    l.isSideHeader ? "side-header" : "",
+    l.same ? "same" : "",
+    l.segs ? "paired" : "",
+  ].join(" ");
+}
+
+/** One rendered line; `prefix` is the (possibly trimmed) tree indentation. */
+function Line({ l, prefix }: { l: TreeLine; prefix: string }) {
+  if (l.change) {
+    const cont = prefix.replace(/[├└]── $/u, (m) => (m.startsWith("├") ? "│   " : "    ")) + "  ";
+    return (
+      <div data-line={l.id}>
+        <div className={lineClass(l)}>
+          <span className="tree-prefix">{prefix}</span>
+          <span className="part-label">{PART_LABEL[l.change.key] ?? l.change.key}</span>
+        </div>
+        <div className="pl side-old paired wrap">
+          <span className="tree-prefix">{cont}</span>
+          <Segs segs={l.change.old} />
+        </div>
+        <div className="pl side-new paired wrap">
+          <span className="tree-prefix">{cont}</span>
+          <Segs segs={l.change.new} />
+        </div>
+      </div>
+    );
+  }
+  if (l.isSideHeader) {
+    return (
+      <div data-line={l.id} className={lineClass(l)} title={l.text.trim()}>
+        <span className="tree-prefix">{prefix}</span>
+        <span className={`side-tag ${l.side}`}>{l.side === "old" ? "旧" : "新"}</span>
+      </div>
+    );
+  }
+  return (
+    <div data-line={l.id} className={lineClass(l)}>
+      <span className="tree-prefix">{prefix}</span>
+      {l.marker && <span className="marker">{l.marker} </span>}
+      {l.segs ? <Segs segs={l.segs} /> : l.text}
+    </div>
+  );
+}
+
+const PART_LABEL: Record<string, string> = { schema: "类型", code: "代码", doc: "文档", tests: "测试", examples: "示例", tags: "标签", ffi: "FFI" };
+
+function FullTree({ lines }: { lines: TreeLine[] }) {
+  return (
+    <pre className="pd-tree">
+      {lines.map((l) => (
+        <Line key={l.id} l={l} prefix={l.prefix} />
+      ))}
+    </pre>
+  );
+}
+
+/** A changed definition (or ns declaration / top-level config) shown as its own card. */
+function isBlockRoot(l: TreeLine) {
+  if (!l.marker || l.marker === "=" || !l.path) return false;
+  const p = l.path;
+  if (p[0] !== "files") return p.length === 1;
+  if (p.length === 2) return l.marker !== "~";
+  if (p.length === 3 && p[2] === "ns") return true;
+  return p.length === 4 && p[2] === "defs";
+}
+
+/**
+ * Compact view: drop the program/files/defs scaffolding and unchanged nodes;
+ * each changed definition becomes a card with a coloured header, and its body
+ * is re-indented relative to the definition.
+ */
+function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) => string | undefined }) {
+  const blocks: { root: TreeLine; body: TreeLine[] }[] = [];
+  let cur: { root: TreeLine; body: TreeLine[] } | null = null;
+  for (const l of lines) {
+    if (l.depth !== undefined && cur && l.depth <= cur.root.depth!) cur = null;
+    if (isBlockRoot(l)) {
+      cur = { root: l, body: [] };
+      blocks.push(cur);
+      continue;
+    }
+    if (cur) cur.body.push(l);
+  }
+  return (
+    <div className="pd-blocks">
+      {blocks.map(({ root, body }) => {
+        const p = root.path!;
+        const ns = p[0] === "files" ? p[1] : "";
+        const name = p[0] !== "files" ? p[0] : p.length === 2 ? p[1] : p[2] === "ns" ? "ns 声明" : p[3];
+        const cut = [...root.prefix].length;
+        const dir = p.length === 4 ? schemaOf(`${ns}/${p[3]}`) : undefined;
+        const kind = p[0] !== "files" ? "配置" : p.length === 2 ? "命名空间" : "";
+        return (
+          <section key={root.id} className={`pd-block mk-${mkClass(root.marker!)}`} data-line={root.id}>
+            <header>
+              <span className="mk-glyph">{GLYPH[root.marker!]}</span>
+              {kind && <span className="muted">{kind}</span>}
+              {ns && p.length > 2 && <span className="muted">{ns}/</span>}
+              <b>{name}</b>
+              {dir && <span className={`pill type-${dir}`}>类型 {dir}</span>}
+              {root.marker === "+" && <span className="pill ready">新增</span>}
+              {root.marker === "-" && <span className="pill failed">删除</span>}
+            </header>
+            <pre className="pd-tree">
+              {body
+                .filter((l) => l.marker !== "=")
+                .map((l) => {
+                  // Drop the definition's own indentation and the part-node column (code/schema/...).
+                  const pre = [...l.prefix].slice(cut + 4).join("");
+                  if (l.marker && l.depth === root.depth! + 1 && !l.change) {
+                    return (
+                      <div key={l.id} data-line={l.id} className="pl part">
+                        <span className="part-label">{PART_LABEL[l.text.split(" ")[0]] ?? l.text.split(" ")[0]}</span>
+                        {l.text.includes(" ") && <span className="muted"> {l.text.slice(l.text.indexOf(" ") + 1)}</span>}
+                      </div>
+                    );
+                  }
+                  return <Line key={l.id} l={l} prefix={pre} />;
+                })}
+            </pre>
+          </section>
+        );
+      })}
     </div>
   );
 }
