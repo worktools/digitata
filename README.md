@@ -43,6 +43,10 @@ program diff 的 `OLD@` / `NEW@` 子树同样逐行对齐：两边完全相同�
 类型：定义的 schema（类型签名）变化会单独列出，拆成旧/新两行逐 token 对比，定义列表上标注“类型 changed/widened/narrowed”；
 CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标注（`assert-type`、`hint-fn` 等）作为代码树的一部分参与 diff。
 
+类型用 calcit 源码写法显示（如 `Fn String (-> String)`，需要包含 calcit#2711 的 calcit），并做轻量着色：类型名紫色、`->` 蓝色、`:generics` 等子句黄色。每张定义卡片标题旁显示该定义当前的类型签名。
+
+锁文件（yarn.lock、Cargo.lock 等）、`.gitattributes` / `.gitignore`、`.yarn/`、压缩或生成产物（`*.min.js`、`js-out/`、`dist/`）默认折叠，文件列表里变灰。
+
 ## 加载与缓存
 
 列表、PR 详情和 program diff 都走 stale-while-revalidate：先显示缓存（列表和详情存在 localStorage，刷新页面也在），后台更新，进度只在右下角提示，失败也只弹角落提示，不清空已有内容。

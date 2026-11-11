@@ -55,7 +55,7 @@ export const q = {
     opts: { label: `#${num} diff` },
   }),
   programDiff: (repo: string, num: number, path: string, baseSha: string, head: string) => ({
-    key: `pd2:${repo}:${path}:${baseSha}:${head}`,
+    key: `pd3:${repo}:${path}:${baseSha}:${head}`,
     fetch: () => api.programDiff(repo, num, path, baseSha, head),
     opts: { label: `program diff ${path.split("/").pop()}`, persist: true, immutable: true },
   }),

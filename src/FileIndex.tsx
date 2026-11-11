@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { rendererFor } from "./diff/FileDiff.tsx";
+import { isNoise, rendererFor } from "./diff/FileDiff.tsx";
 import type { FilePatch } from "./diff/parse.ts";
 
 /**
@@ -52,7 +52,7 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
           const name = f.path.split("/").pop();
           const dir = f.path.slice(0, f.path.length - (name?.length ?? 0));
           return (
-            <li key={f.path} className={f.path === active ? "on" : ""} title={f.path}>
+            <li key={f.path} className={`${f.path === active ? "on" : ""} ${isNoise(f.path) ? "noise" : ""}`} title={f.path}>
               <a
                 href={`#file-${f.path}`}
                 onClick={(e) => {

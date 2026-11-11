@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PRSummary } from "../shared/types.ts";
 import { q as Q } from "./api.ts";
 import { mergeKey, onMergeDone, summaryOf, useCached } from "./store.ts";
-import { FileDiff, rendererFor } from "./diff/FileDiff.tsx";
+import { FileDiff, isNoise, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
 import { FileIndex } from "./FileIndex.tsx";
 import { MergePanel } from "./MergePanel.tsx";
@@ -129,7 +129,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
                   key={`${pr.headRefOid}:${f.path}`}
                   file={f}
                   ctx={{ repo, num, baseSha: pr.baseRefOid, headSha: pr.headRefOid }}
-                  defaultOpen={!!rendererFor(f) || totalLines < 3000 || f.additions + f.deletions < 400}
+                  defaultOpen={!isNoise(f.path) && (!!rendererFor(f) || totalLines < 3000 || f.additions + f.deletions < 400)}
                 />
               ))}
               </div>

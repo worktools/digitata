@@ -78,7 +78,7 @@ export function parseTree(raw: string[]): { lines: TreeLine[]; defs: DefChange[]
       stack[depth] = name;
       const marker = nm[1] as Marker;
       const path = stack.slice(1);
-      const cm = marker === "~" ? /^(\S+) (".*") -> (".*")$/.exec(nm[2]) : null;
+      const cm = marker === "~" ? /^(\S+) "(.*)" -> "(.*)"$/.exec(nm[2]) : null;
       const change = cm ? { key: cm[1], ...inlineDiff(cm[2], cm[3]) } : undefined;
       lines.push({ id, prefix, text: nm[2], marker, depth, path, change });
       // files/<ns>/defs/<def>

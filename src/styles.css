@@ -318,3 +318,15 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .side-tag.new { color: var(--add-fg); background: color-mix(in srgb, var(--add-fg) 14%, transparent); }
 .pd-tree .side-header { background: transparent !important; }
 .pd-tree .pl.wrap { text-indent: 0; padding-left: 12px; }
+
+/* ---- type spellings ---- */
+.ty-name { color: #8250df; }
+.ty-arrow { color: var(--accent); font-weight: 700; }
+.ty-kw { color: var(--mod-fg); }
+.ty-punct { color: var(--muted); }
+.ty-var { color: var(--fg); font-style: italic; }
+@media (prefers-color-scheme: dark) { .ty-name { color: #d2a8ff; } }
+.pd-block header .sig { font-weight: 400; font-size: 12px; margin-left: 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+.pd-block header .sig::before { content: ":: "; color: var(--muted); }
+.pd-tree .side-old.wrap .ty-name, .pd-tree .side-old.wrap .ty-var { color: inherit; }
+.file-index li.noise a { opacity: 0.55; }

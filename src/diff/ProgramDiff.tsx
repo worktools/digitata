@@ -114,11 +114,11 @@ function Line({ l, prefix }: { l: TreeLine; prefix: string }) {
         </div>
         <div className="pl side-old paired wrap">
           <span className="tree-prefix">{cont}</span>
-          <Segs segs={l.change.old} />
+          <Segs segs={l.change.old} typed={l.change.key === "schema"} />
         </div>
         <div className="pl side-new paired wrap">
           <span className="tree-prefix">{cont}</span>
-          <Segs segs={l.change.new} />
+          <Segs segs={l.change.new} typed={l.change.key === "schema"} />
         </div>
       </div>
     );
@@ -188,6 +188,10 @@ function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) 
         const cut = [...root.prefix].length;
         const dir = p.length === 4 ? schemaOf(`${ns}/${p[3]}`) : undefined;
         const kind = p[0] !== "files" ? "配置" : p.length === 2 ? "命名空间" : "";
+        // Current type signature, shown next to the name: unchanged schemas are
+        // folded out of the body, but the signature is useful context.
+        const sch = body.find((l) => l.path?.[4] === "schema" && l.depth === root.depth! + 1);
+        const sig = sch?.change ? null : sch && /^schema "(.*)"$/.exec(sch.text)?.[1];
         return (
           <section key={root.id} className={`pd-block mk-${mkClass(root.marker!)}`} data-line={root.id}>
             <header>
@@ -195,6 +199,11 @@ function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) 
               {kind && <span className="muted">{kind}</span>}
               {ns && p.length > 2 && <span className="muted">{ns}/</span>}
               <b>{name}</b>
+              {sig && (
+                <span className="sig" title={sig}>
+                  <TypeText text={sig} />
+                </span>
+              )}
               {dir && <span className={`pill type-${dir}`}>类型 {dir}</span>}
               {root.marker === "+" && <span className="pill ready">新增</span>}
               {root.marker === "-" && <span className="pill failed">删除</span>}
@@ -227,14 +236,37 @@ function mkClass(m: Marker) {
   return { "+": "add", "-": "del", "~": "mod", "=": "same" }[m];
 }
 
-export function Segs({ segs }: { segs: { text: string; changed: boolean }[] }) {
+export function Segs({ segs, typed }: { segs: { text: string; changed: boolean }[]; typed?: boolean }) {
   return (
     <>
       {segs.map((s, i) => (
         <span key={i} className={s.changed ? "chg" : "unchg"}>
-          {s.text}
+          {typed ? <TypeText text={s.text} /> : s.text}
         </span>
       ))}
+    </>
+  );
+}
+
+/**
+ * Light syntax colouring for Calcit type spellings such as
+ * `Fn (List T) (-> Option T) (:generics T)`: type names, arrows, clause tags.
+ */
+export function TypeText({ text }: { text: string }) {
+  const parts = text.split(/(\s+|[()$])/).filter(Boolean);
+  return (
+    <>
+      {parts.map((t, i) => {
+        const cls =
+          t === "->" ? "ty-arrow" : t.startsWith(":") ? "ty-kw" : /^[()$]$/.test(t) ? "ty-punct" : /^([\w.-]+\/)?[A-Z]/.test(t) ? "ty-name" : /^\s+$/.test(t) ? "" : "ty-var";
+        return cls ? (
+          <span key={i} className={cls}>
+            {t}
+          </span>
+        ) : (
+          t
+        );
+      })}
     </>
   );
 }

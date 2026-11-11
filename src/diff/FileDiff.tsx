@@ -30,6 +30,21 @@ const renderers: Renderer[] = [
   },
 ];
 
+/**
+ * Files whose diff is rarely worth reading (lockfiles, git metadata, minified
+ * or generated output): collapsed by default, still one click away.
+ */
+const NOISE = [
+  /(^|\/)(yarn\.lock|package-lock\.json|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|Gemfile\.lock|poetry\.lock|go\.sum|composer\.lock)$/,
+  /(^|\/)\.git(attributes|ignore|modules)$/,
+  /(^|\/)\.yarn\//,
+  /\.min\.(js|css)$/,
+  /(^|\/)(js-out|dist|node_modules)\//,
+];
+export function isNoise(path: string) {
+  return NOISE.some((re) => re.test(path));
+}
+
 export function rendererFor(file: FilePatch) {
   return renderers.find((r) => r.matches(file));
 }
@@ -46,6 +61,7 @@ export function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: Dif
         <span className="caret">{open ? "▾" : "▸"}</span>
         <span className={`status st-${file.status}`}>{file.status}</span>
         <code className="file-path">{file.path}</code>
+        {isNoise(file.path) && !open && <span className="pill unknown">已折叠</span>}
         <span className="stat">
           <span className="add">+{file.additions}</span> <span className="del">−{file.deletions}</span>
         </span>
