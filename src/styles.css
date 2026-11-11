@@ -130,21 +130,25 @@ main { overflow: auto; min-width: 0; }
 .ck-pending .dot { background: var(--mod-fg); }
 .check-list.compact { font-size: 12px; margin: 0; }
 
-.files-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+.files-layout { position: relative; }
 .files-main { min-width: 0; }
 .file { scroll-margin-top: calc(var(--bar-h) + 4px); }
-.file-index { position: sticky; top: calc(var(--bar-h) + 10px); max-height: calc(100vh - var(--bar-h) - 24px); overflow: auto; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg2); }
-.file-index .fi-head { padding: 6px 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg2); }
+.fi-anchor { position: sticky; top: calc(var(--bar-h) + 8px); height: 0; z-index: 4; display: flex; justify-content: flex-end; pointer-events: none; }
+.file-index { pointer-events: auto; width: 260px; height: fit-content; max-height: calc(100vh - var(--bar-h) - 32px); overflow: auto; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--bg2) 88%, transparent); backdrop-filter: blur(6px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); margin-right: -12px; }
+.file-index.collapsed { width: auto; }
+.file-index .fi-head { padding: 5px 10px; position: sticky; top: 0; background: inherit; cursor: pointer; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.file-index:not(.collapsed) .fi-head { border-bottom: 1px solid var(--border); }
+.file-index .fi-toggle { margin-left: auto; }
 .file-index ul { list-style: none; margin: 0; padding: 4px 0; }
 .file-index li a { display: flex; gap: 6px; align-items: baseline; padding: 3px 10px; color: var(--fg); text-decoration: none; }
 .file-index li a:hover { background: var(--bg3); }
 .file-index li.on a { background: var(--bg3); box-shadow: inset 3px 0 var(--accent); font-weight: 600; }
 .file-index .fi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-index .fi-prog { color: var(--accent); font-weight: 700; }
-@media (max-width: 1100px) {
-  .files-layout { grid-template-columns: 1fr; }
-  .file-index { position: static; max-height: none; order: -1; margin-bottom: 12px; }
-}
+/* Sticky file headers slide under the card; keep their controls clear of it. */
+.files-layout:has(.file-index:not(.collapsed)) .file-head { padding-right: 262px; }
+.files-layout:has(.file-index.collapsed) .file-head { padding-right: 150px; }
+
 .status { font-size: 11px; font-family: var(--mono); color: var(--muted); }
 .status.st-added { color: var(--add-fg); }
 .status.st-deleted { color: var(--del-fg); }

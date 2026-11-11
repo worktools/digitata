@@ -8,6 +8,8 @@ import type { FilePatch } from "./diff/parse.ts";
  */
 export function FileIndex({ files }: { files: FilePatch[] }) {
   const [active, setActive] = useState(files[0]?.path ?? "");
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("digitata.fi-collapsed") === "1");
+  useEffect(() => localStorage.setItem("digitata.fi-collapsed", collapsed ? "1" : "0"), [collapsed]);
 
   useEffect(() => {
     const main = document.querySelector("main");
@@ -37,11 +39,15 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
   const total = files.reduce((a, f) => [a[0] + f.additions, a[1] + f.deletions], [0, 0]);
 
   return (
-    <nav className="file-index">
-      <div className="fi-head muted">
+    // Zero-height sticky anchor: the card floats over the top-right of the code
+    // without reserving a column, so the code keeps the full width below it.
+    <div className="fi-anchor">
+    <nav className={`file-index ${collapsed ? "collapsed" : ""}`}>
+      <div className="fi-head muted" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "展开文件列表" : "收起文件列表"}>
         {files.length} 个文件 <span className="add">+{total[0]}</span> <span className="del">−{total[1]}</span>
+        <span className="fi-toggle">{collapsed ? "▸" : "▾"}</span>
       </div>
-      <ul>
+      {!collapsed && <ul>
         {files.map((f) => {
           const name = f.path.split("/").pop();
           const dir = f.path.slice(0, f.path.length - (name?.length ?? 0));
@@ -67,7 +73,8 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
             </li>
           );
         })}
-      </ul>
+      </ul>}
     </nav>
+    </div>
   );
 }

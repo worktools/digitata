@@ -122,6 +122,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
           {!patch && (diff.error ? <div className="error">{diff.error}</div> : <div className="loading">加载 diff…</div>)}
           {patch && (
             <div className="files-layout">
+              <FileIndex files={patch} />
               <div className="files-main">
               {patch.map((f) => (
                 <FileDiff
@@ -132,7 +133,6 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
                 />
               ))}
               </div>
-              <FileIndex files={patch} />
             </div>
           )}
         </div>
