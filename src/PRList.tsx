@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChecksSummary, InboxFilter, PRSummary } from "../shared/types.ts";
+import type { ChecksSummary, PRSummary } from "../shared/types.ts";
 import { q as Q } from "./api.ts";
 import { mergeKey, prefetch, rememberSummaries, useCached, useMerges } from "./store.ts";
 
@@ -110,7 +110,7 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
         <ChecksBadge checks={pr.checks} />
         {pr.reviewDecision && <span className={`tag rv-${pr.reviewDecision}`}>{pr.reviewDecision.toLowerCase().replace("_", " ")}</span>}
         <span className="muted">
-          {pr.author} · {timeAgo(pr.updatedAt)}
+          {pr.author} · {pr.createdAt ? `创建于 ${timeAgo(pr.createdAt)}` : timeAgo(pr.updatedAt)}
         </span>
         <span className="stat">
           <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
@@ -120,40 +120,26 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
   );
 }
 
-const INBOX_TABS: { id: InboxFilter; label: string }[] = [
-  { id: "all", label: "全部" },
-  { id: "author", label: "我创建的" },
-  { id: "review", label: "请求我 review" },
-  { id: "assignee", label: "指派给我" },
-  { id: "mentioned", label: "提到我" },
-];
-
-const isReady = (pr: PRSummary) => !pr.isDraft && pr.checks.state !== "failure" && pr.checks.state !== "pending" && pr.reviewDecision !== "CHANGES_REQUESTED";
-
-/** Cross-repo inbox, like github.com/pulls: open PRs that involve the viewer. */
+/**
+ * PRs waiting for the viewer to merge, across all repos: open, non-draft PRs the
+ * viewer authored, was asked to review, or is assigned. Oldest first, so the
+ * longest-waiting PR is on top; a PR disappears as soon as its merge succeeds.
+ */
 export function InboxList({ selected, onSelect, reloadKey }: { selected?: string; onSelect: (repo: string, n: number) => void; reloadKey: number }) {
-  const [filter, setFilter] = useState<InboxFilter>(() => (localStorage.getItem("digitata.inbox") as InboxFilter) || "all");
-  const [readyOnly, setReadyOnly] = useState(false);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const src = Q.inbox(filter, query);
+  const src = Q.inbox("all", query);
   const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
+  const merges = useMerges();
   useReload(reloadKey, refresh);
   useEffect(() => prs && rememberSummaries(null, prs), [prs]);
-  useEffect(() => localStorage.setItem("digitata.inbox", filter), [filter]);
 
-  const shown = prs?.filter((p) => !readyOnly || isReady(p));
-  const readyCount = prs?.filter(isReady).length ?? 0;
+  const shown = prs
+    ?.filter((p) => !p.isDraft && merges[mergeKey(p.repo!, p.number)]?.state !== "done")
+    .sort((a, b) => (a.createdAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.updatedAt));
 
   return (
     <div className="pr-list">
-      <div className="inbox-tabs">
-        {INBOX_TABS.map((t) => (
-          <button key={t.id} className={filter === t.id ? "on" : ""} onClick={() => setFilter(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
       <div className="filters">
         <form
           onSubmit={(e) => {
@@ -163,16 +149,13 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
         >
           <input placeholder="附加搜索条件，如 org:calcit-lang" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
-        <label className="ready">
-          <input type="checkbox" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} /> 可合并 {prs ? readyCount : ""}
-        </label>
       </div>
       {err && !prs && <div className="error">{err}</div>}
       {!prs && !err && <div className="loading">加载中…</div>}
-      {shown && shown.length === 0 && <div className="empty">没有 PR</div>}
-      {prs && (
+      {shown && shown.length === 0 && <div className="empty">没有待合并的 PR</div>}
+      {shown && (
         <div className="count muted">
-          {shown!.length} 个 PR
+          待合并 {shown.length} 个 · 最早的在上
           <button className="link" onClick={refresh}>
             刷新
           </button>

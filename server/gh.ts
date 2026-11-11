@@ -101,7 +101,7 @@ const INBOX_QUERY = `query($q: String!) {
   search(query: $q, type: ISSUE, first: 50) {
     nodes {
       ... on PullRequest {
-        number title url state isDraft updatedAt additions deletions changedFiles
+        number title url state isDraft updatedAt createdAt additions deletions changedFiles
         reviewDecision headRefName baseRefName
         repository { nameWithOwner }
         author { login }
@@ -153,6 +153,7 @@ function searchNodeToSummary(n: Json): PRSummary {
     isDraft: !!n.isDraft,
     state: n.state,
     updatedAt: n.updatedAt,
+    createdAt: n.createdAt,
     reviewDecision: n.reviewDecision ?? "",
     additions: n.additions ?? 0,
     deletions: n.deletions ?? 0,
@@ -222,8 +223,9 @@ export class GhCliHost implements CodeHost {
     const method = { squash: "--squash", merge: "--merge", rebase: "--rebase" }[req.method];
     if (!method) throw new Error(`unknown merge method ${req.method}`);
     if (process.env.DIGITATA_DRY_MERGE) {
-      // Test mode: never calls GitHub; simulates a slow merge that fails.
+      // Test mode: never calls GitHub; simulates a slow merge that fails (or succeeds with =ok).
       await new Promise((r) => setTimeout(r, 5000));
+      if (process.env.DIGITATA_DRY_MERGE === "ok") return `dry run: pretended to merge ${repo}#${num}`;
       throw new Error(`dry run: would merge ${repo}#${num} (${req.method})`);
     }
     const args = ["pr", "merge", String(num), "-R", assertRepo(repo), method, "--match-head-commit", req.headRefOid];

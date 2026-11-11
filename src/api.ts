@@ -33,9 +33,9 @@ export const api = {
 // Cache keys and fetch options shared by views and hover prefetch.
 export const q = {
   inbox: (filter: InboxFilter, query: string) => ({
-    key: `inbox:${filter}:${query}`,
+    key: `inbox2:${filter}:${query}`,
     fetch: () => api.inbox(filter, query),
-    opts: { label: "收件箱", persist: true, keepPrevious: true },
+    opts: { label: "待合并列表", persist: true, keepPrevious: true },
   }),
   list: (repo: string, state: string, query: string) => ({
     key: `list:${repo}:${state}:${query}`,

@@ -6,11 +6,11 @@
 `calcit analyze program-diff --base <merge-base> <head>`，按 ns → def 列出新增 / 删除 / 修改的定义，
 并把修改的定义渲染成 Cirru 缩进树，旧/新子树分别高亮。
 
-## 收件箱
+## 待合并列表
 
-默认打开的是跨仓库收件箱（类似 https://github.com/pulls ），列出所有和你有关的 open PR：我创建的、请求我 review、指派给我、提到我；“全部”是前三者合并去重。
-勾选“可合并”只显示非草稿、CI 未失败/未在运行、没有被要求修改的 PR。附加搜索框接受 GitHub 搜索语法（如 `org:calcit-lang`）。
-数据来自一次 `gh api graphql` search，顺带拿到每个 PR 的 CI 计数。也可以在侧栏固定单个仓库查看其 PR 列表。
+侧栏默认是跨仓库的“待合并”列表：所有我创建的、请求我 review 或指派给我的 open PR（不含草稿），按创建时间从早到晚排，等得最久的在最上面。
+合并成功后该 PR 立即从列表消失，随后列表自动刷新。附加搜索框接受 GitHub 搜索语法（如 `org:calcit-lang`）。
+数据来自 `gh api graphql` search，顺带拿到每个 PR 的 CI 计数。也可以在侧栏固定单个仓库查看其 PR 列表。
 
 ## 运行
 
@@ -53,5 +53,5 @@ CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标�
 合并前弹确认框，显示 CI 状态、mergeable / mergeStateStatus、review 结论；CI 失败、运行中、有冲突或草稿时需要额外勾选确认。
 键盘：PR 页按 `M` 打开确认框；框内 `Enter` 合并、`Esc` 取消、`1`/`2`/`3` 选方式、`D` 切换删除分支、`A` 确认警告。
 合并在后台任务里执行：确认后对话框立即关闭，可以马上切到别的 PR；列表上该 PR 显示“合并中 / 已合并 / 合并失败”，结果在右下角提示，完成后列表自动刷新。
-测试用：`DIGITATA_DRY_MERGE=1` 启动的服务不会调用 GitHub，合并请求等 5 秒后返回失败。
+测试用：`DIGITATA_DRY_MERGE=1` 启动的服务不会调用 GitHub，合并请求等 5 秒后返回失败；`DIGITATA_DRY_MERGE=ok` 则假装成功。
 合并请求带上页面看到的 head SHA（`gh pr merge --match-head-commit`），PR 在此之后有新提交会被拒绝。

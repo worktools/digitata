@@ -30,6 +30,7 @@ export interface PRSummary {
   isDraft: boolean;
   state: string;
   updatedAt: string;
+  createdAt?: string;
   reviewDecision: string;
   additions: number;
   deletions: number;

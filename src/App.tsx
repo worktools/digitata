@@ -67,7 +67,7 @@ export function App() {
         <div className="brand">Digitata</div>
         <div className="repos">
           <div className={`repo ${source === "inbox" ? "on" : ""}`}>
-            <button onClick={() => setSource("inbox")}>📥 收件箱（所有仓库）</button>
+            <button onClick={() => setSource("inbox")}>⏳ 待合并（所有仓库）</button>
           </div>
           {repos.map((r) => (
             <div key={r} className={`repo ${r === source ? "on" : ""}`}>
