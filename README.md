@@ -24,14 +24,14 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 
 地址格式：`#/<owner>/<repo>/<PR 号>`，例如 `http://localhost:7741/#/calcit-lang/calcit/2685`。
 
-环境变量：`DIGITATA_PORT`（默认 7741）、`DIGITATA_CACHE`（仓库缓存，默认 `~/.cache/digitata/repos`）、
+环境变量：`DIGITATA_PORT`（默认 7741）、
 `DIGITATA_CALCIT`（calcit 可执行文件，默认 `calcit`）。
 
 ## 结构
 
 - `server/host.ts`：`CodeHost` 接口（`inbox` / `listPRs` / `getPR` / `getDiff` / `merge`）。
 - `server/gh.ts`：基于 `gh pr list/view --json`、`gh pr diff`、`gh pr merge` 的实现。以后换成直接调 REST/GraphQL 只需另写一个实现。
-- `server/calcit.ts`：为每个仓库维护一个 blobless clone，fetch `refs/pull/N/head`，在 merge-base 和 head 之间跑 program diff（同一仓库串行）。
+- `server/calcit.ts`：不 clone 仓库：用 GitHub API 取 merge-base 和 head 两个版本的文件，放进临时的两提交 git 仓库里跑 `calcit analyze program-diff`，用完即删。
 - `server/main.ts`：只监听 `127.0.0.1` 的薄 HTTP 层，拒绝非 localhost 的 Origin。
 - `src/diff/FileDiff.tsx`：按文件名分派渲染器；`.cirru`（除 `deps.cirru`）默认走 program diff，失败自动回退文本 diff。
 

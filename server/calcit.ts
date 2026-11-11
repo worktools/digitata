@@ -1,35 +1,35 @@
-// Calcit program diff: keeps a cached clone per repo, fetches the PR's base and
-// head commits, and runs `calcit analyze program-diff --base <base> <head>`,
-// which compares two snapshots ns -> def and prints a structural tree diff.
+// Calcit program diff without cloning: fetch the file at the merge base and at
+// the PR head through the GitHub API, commit both into a throwaway two-commit
+// git repo, and run `calcit analyze program-diff --base <c1> <c2>` there (the
+// CLI reads both sides from git history).
 
-import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { ProgramDiffResult } from "../shared/types.ts";
 import { assertRepo } from "./gh.ts";
-import { run, runOk, serialized } from "./run.ts";
+import { run, runOk } from "./run.ts";
 
-const CACHE_DIR = process.env.DIGITATA_CACHE ?? join(homedir(), ".cache", "digitata", "repos");
 const CALCIT = process.env.DIGITATA_CALCIT ?? "calcit";
+const GH_CWD = tmpdir();
 
-async function ensureClone(repo: string): Promise<string> {
-  const dir = join(CACHE_DIR, ...assertRepo(repo).split("/"));
-  if (!existsSync(join(dir, ".git"))) {
-    await mkdir(dir, { recursive: true });
-    // Blobless clone keeps the first fetch small; blobs are pulled on demand by git show/checkout.
-    await runOk("gh", ["repo", "clone", repo, dir, "--", "--filter=blob:none", "--no-checkout", "-q"], { timeoutMs: 600_000 });
-  }
-  return dir;
+/** Merge base of base..head, as `gh pr diff` uses (commits that landed on base later are not shown). */
+async function mergeBaseOf(repo: string, base: string, head: string): Promise<string> {
+  const out = await runOk("gh", ["api", `repos/${repo}/compare/${base}...${head}`, "--jq", ".merge_base_commit.sha"], { cwd: GH_CWD });
+  return out.trim() || base;
 }
 
-async function hasCommit(dir: string, sha: string): Promise<boolean> {
-  return (await run("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: dir })).code === 0;
+/** Raw file content at a commit, or null when the file does not exist there. */
+async function fileAt(repo: string, sha: string, path: string): Promise<string | null> {
+  const p = path.split("/").map(encodeURIComponent).join("/");
+  const r = await run("gh", ["api", "-H", "Accept: application/vnd.github.raw", `repos/${repo}/contents/${p}?ref=${sha}`], { cwd: GH_CWD, timeoutMs: 120_000 });
+  if (r.code === 0) return r.stdout;
+  if (/404|Not Found/i.test(r.stderr + r.stdout)) return null;
+  throw new Error(`fetching ${path}@${sha.slice(0, 8)} failed: ${r.stderr.trim()}`);
 }
 
-async function fileAt(dir: string, sha: string, path: string): Promise<boolean> {
-  return (await run("git", ["cat-file", "-e", `${sha}:${path}`], { cwd: dir })).code === 0;
-}
+const git = (cwd: string, args: string[]) =>
+  runOk("git", ["-c", "user.name=digitata", "-c", "user.email=digitata@localhost", "-c", "commit.gpgsign=false", ...args], { cwd });
 
 export function isProgramFile(path: string): boolean {
   const base = path.split("/").pop() ?? path;
@@ -62,31 +62,35 @@ export function parseProgramDiff(path: string, stdout: string, stderr: string): 
   return { ok: tree.length > 0, path, meta, tree, notes };
 }
 
-export function programDiff(repo: string, num: number, path: string, baseSha: string, headSha: string): Promise<ProgramDiffResult> {
+export async function programDiff(repo: string, _num: number, path: string, baseSha: string, headSha: string): Promise<ProgramDiffResult> {
+  assertRepo(repo);
   if (!/^[0-9a-f]{40}$/.test(baseSha) || !/^[0-9a-f]{40}$/.test(headSha)) throw new Error("base/head must be full SHAs");
   if (path.startsWith("/") || path.split("/").includes("..")) throw new Error(`invalid path ${path}`);
-  return serialized(repo, async () => {
-    const dir = await ensureClone(repo);
-    if (!(await hasCommit(dir, headSha)) || !(await hasCommit(dir, baseSha))) {
-      await runOk("git", ["fetch", "-q", "origin", `+refs/pull/${num}/head:refs/digitata/pr/${num}`, baseSha], { cwd: dir, timeoutMs: 600_000 });
-    }
-    // Like `gh pr diff`, compare against the merge base rather than the base branch tip,
-    // so commits that landed on the base branch after the PR branched are not shown.
-    const mergeBase = (await runOk("git", ["merge-base", baseSha, headSha], { cwd: dir })).trim() || baseSha;
-    // The CLI resolves the input path in the working tree, so check out a
-    // commit that has the file (head, or base when the PR deletes it).
-    const inHead = await fileAt(dir, headSha, path);
-    const inBase = await fileAt(dir, mergeBase, path);
-    if (!inHead && !inBase) throw new Error(`${path} not found in base or head`);
-    // Added or deleted files: the CLI needs both sides, so report it plainly.
-    if (!inHead || !inBase) {
-      return { ok: false, path, meta: {}, tree: [], notes: [], error: inHead ? "该文件为新增，无 base 可比较" : "该文件被删除" };
-    }
-    await runOk("git", ["checkout", "-q", "--force", "--detach", headSha], { cwd: dir, timeoutMs: 600_000 });
-    const r = await run(CALCIT, [path, "analyze", "program-diff", "--base", mergeBase, headSha], { cwd: dir, timeoutMs: 120_000 });
+  const mergeBase = await mergeBaseOf(repo, baseSha, headSha);
+  const [before, after] = await Promise.all([fileAt(repo, mergeBase, path), fileAt(repo, headSha, path)]);
+  if (before === null && after === null) throw new Error(`${path} not found in base or head`);
+  // Added or deleted files: the CLI needs both sides, so report it plainly.
+  if (before === null || after === null) {
+    return { ok: false, path, meta: {}, tree: [], notes: [], error: after !== null ? "该文件为新增，无 base 可比较" : "该文件被删除" };
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "digitata-pd-"));
+  try {
+    const file = join(dir, path);
+    await mkdir(dirname(file), { recursive: true });
+    await git(dir, ["init", "-q"]);
+    await writeFile(file, before);
+    await git(dir, ["add", "--", path]);
+    await git(dir, ["commit", "-q", "-m", "base"]);
+    await writeFile(file, after);
+    await git(dir, ["commit", "-q", "-am", "head"]);
+    const args = [path, "analyze", "program-diff", "--base", "HEAD~1"];
+    const [r, j] = await Promise.all([
+      run(CALCIT, [...args, "HEAD"], { cwd: dir, timeoutMs: 120_000 }),
+      // The JSON format adds per-definition schema direction and widening evidence.
+      run(CALCIT, [...args, "--format", "json", "HEAD"], { cwd: dir, timeoutMs: 120_000 }),
+    ]);
     const res = parseProgramDiff(path, r.stdout, r.stderr);
-    // The JSON format adds per-definition schema direction and widening evidence.
-    const j = await run(CALCIT, [path, "analyze", "program-diff", "--base", mergeBase, "--format", "json", headSha], { cwd: dir, timeoutMs: 120_000 });
     try {
       const ev = JSON.parse(j.stdout.slice(j.stdout.indexOf("{"))).data?.evidence;
       res.schema = (ev?.changes ?? [])
@@ -98,5 +102,7 @@ export function programDiff(repo: string, num: number, path: string, baseSha: st
     }
     if (r.code !== 0 || !res.ok) res.error = (r.stderr || r.stdout).trim().split("\n").slice(-5).join("\n") || `calcit exited ${r.code}`;
     return res;
-  });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
