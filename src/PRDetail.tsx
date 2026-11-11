@@ -4,6 +4,7 @@ import { q as Q } from "./api.ts";
 import { mergeKey, onMergeDone, summaryOf, useCached } from "./store.ts";
 import { FileDiff, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
+import { FileIndex } from "./FileIndex.tsx";
 import { MergePanel } from "./MergePanel.tsx";
 import { ChecksBadge, timeAgo } from "./PRList.tsx";
 
@@ -115,20 +116,8 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
         <div className="files">
           {!patch && (diff.error ? <div className="error">{diff.error}</div> : <div className="loading">加载 diff…</div>)}
           {patch && (
-            <>
-              <ul className="file-index">
-                {patch.map((f) => (
-                  <li key={f.path}>
-                    <a href={`#file-${f.path}`} onClick={(e) => { e.preventDefault(); document.getElementById(`file-${f.path}`)?.scrollIntoView(); }}>
-                      <span className={`status st-${f.status}`}>{f.status[0].toUpperCase()}</span> {f.path}
-                    </a>{" "}
-                    {rendererFor(f) && <span className="tag">program</span>}
-                    <span className="stat">
-                      <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <div className="files-layout">
+              <div className="files-main">
               {patch.map((f) => (
                 <FileDiff
                   key={`${pr.headRefOid}:${f.path}`}
@@ -137,7 +126,9 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
                   defaultOpen={!!rendererFor(f) || totalLines < 3000 || f.additions + f.deletions < 400}
                 />
               ))}
-            </>
+              </div>
+              <FileIndex files={patch} />
+            </div>
           )}
         </div>
       )}

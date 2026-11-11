@@ -1,0 +1,73 @@
+import { useEffect, useState } from "react";
+import { rendererFor } from "./diff/FileDiff.tsx";
+import type { FilePatch } from "./diff/parse.ts";
+
+/**
+ * Changed-file list docked on the right of the diff. It stays in view while
+ * scrolling and highlights the file currently at the top of the viewport.
+ */
+export function FileIndex({ files }: { files: FilePatch[] }) {
+  const [active, setActive] = useState(files[0]?.path ?? "");
+
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (!main) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const bar = document.querySelector(".merge-bar")?.getBoundingClientRect().bottom ?? 0;
+      let cur = files[0]?.path ?? "";
+      for (const f of files) {
+        const el = document.getElementById(`file-${f.path}`);
+        if (el && el.getBoundingClientRect().top <= bar + 48) cur = f.path;
+      }
+      setActive(cur);
+    };
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    main.addEventListener("scroll", on, { passive: true });
+    update();
+    return () => {
+      main.removeEventListener("scroll", on);
+      cancelAnimationFrame(raf);
+    };
+  }, [files]);
+
+  const total = files.reduce((a, f) => [a[0] + f.additions, a[1] + f.deletions], [0, 0]);
+
+  return (
+    <nav className="file-index">
+      <div className="fi-head muted">
+        {files.length} 个文件 <span className="add">+{total[0]}</span> <span className="del">−{total[1]}</span>
+      </div>
+      <ul>
+        {files.map((f) => {
+          const name = f.path.split("/").pop();
+          const dir = f.path.slice(0, f.path.length - (name?.length ?? 0));
+          return (
+            <li key={f.path} className={f.path === active ? "on" : ""} title={f.path}>
+              <a
+                href={`#file-${f.path}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(`file-${f.path}`)?.scrollIntoView({ block: "start" });
+                }}
+              >
+                <span className={`status st-${f.status}`}>{f.status[0].toUpperCase()}</span>
+                <span className="fi-name">
+                  <span className="muted">{dir}</span>
+                  {name}
+                </span>
+                {rendererFor(f) && <span className="fi-prog" title="program diff">ƒ</span>}
+                <span className="stat">
+                  <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
