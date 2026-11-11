@@ -92,7 +92,7 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
   const job = useMerges()[mergeKey(pr.repo ?? pr.url.split("/").slice(3, 5).join("/"), pr.number)];
   return (
     <li
-      className={selected ? "sel" : ""}
+      className={`${selected ? "sel" : ""} ${job?.state === "done" ? "leaving" : ""}`}
       onClick={onSelect}
       onMouseEnter={() => onHover && (timer.current = window.setTimeout(onHover, 150))}
       onMouseLeave={() => clearTimeout(timer.current)}
@@ -120,6 +120,8 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
   );
 }
 
+const LEAVE_MS = 1400;
+
 /**
  * PRs waiting for the viewer to merge, across all repos: open, non-draft PRs the
  * viewer authored, was asked to review, or is assigned. Oldest first, so the
@@ -132,10 +134,21 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
   const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
   const merges = useMerges();
   useReload(reloadKey, refresh);
+  // Merged rows play a short leave animation before they are dropped.
+  const [, tick] = useState(0);
+  const leaving = Object.values(merges).some((j) => j.doneAt && Date.now() - j.doneAt < LEAVE_MS);
+  useEffect(() => {
+    if (!leaving) return;
+    const t = setTimeout(() => tick((x) => x + 1), LEAVE_MS);
+    return () => clearTimeout(t);
+  }, [merges, leaving]);
   useEffect(() => prs && rememberSummaries(null, prs), [prs]);
 
   const shown = prs
-    ?.filter((p) => !p.isDraft && merges[mergeKey(p.repo!, p.number)]?.state !== "done")
+    ?.filter((p) => {
+      const j = merges[mergeKey(p.repo!, p.number)];
+      return !p.isDraft && !(j?.state === "done" && Date.now() - (j.doneAt ?? 0) >= LEAVE_MS);
+    })
     .sort((a, b) => (a.createdAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.updatedAt));
 
   return (

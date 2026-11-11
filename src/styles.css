@@ -247,3 +247,12 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .tag.merging { color: var(--mod-fg); border-color: var(--mod-fg); }
 .tag.merged-local { color: #8250df; border-color: #8250df; }
 .tag.merge-failed { color: var(--del-fg); border-color: var(--del-fg); }
+
+/* A merged row flashes green, then fades and collapses (LEAVE_MS in PRList). */
+.pr-list li.leaving { overflow: hidden; pointer-events: none; animation: pr-leave 1.4s ease-in forwards; }
+@keyframes pr-leave {
+  0% { background: var(--add-bg); max-height: 120px; opacity: 1; }
+  45% { background: var(--add-bg); max-height: 120px; opacity: 1; transform: translateX(0); }
+  100% { background: var(--add-bg); max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; transform: translateX(24px); }
+}
+@media (prefers-reduced-motion: reduce) { .pr-list li.leaving { animation-duration: 0.01s; } }

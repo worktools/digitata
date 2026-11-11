@@ -188,6 +188,8 @@ export function summaryOf(repo: string, num: number) {
 export interface MergeJob {
   state: "running" | "done" | "failed";
   text: string;
+  /** When the merge succeeded (ms), for the list's leave animation. */
+  doneAt?: number;
 }
 
 let merges: Record<string, MergeJob> = {};
@@ -206,7 +208,7 @@ export function startMerge(repo: string, num: number, run: () => Promise<string>
   set({ state: "running", text: "合并中…" });
   track(`合并 ${repo.split("/")[1]}#${num}`, run())
     .then((msg) => {
-      set({ state: "done", text: msg || "已合并" });
+      set({ state: "done", text: msg || "已合并", doneAt: Date.now() });
       toast(`✓ 已合并 ${key}`, "ok");
       // Detail and lists are stale now; drop the detail cache and tell listeners to refresh.
       mem.delete(`pr:${key}`);
