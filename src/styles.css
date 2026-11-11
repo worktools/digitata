@@ -204,3 +204,18 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .modal label { display: inline-flex; gap: 4px; align-items: center; }
 .modal label input { width: auto; }
 .pr-list .count .link { margin-left: 8px; font-size: 12px; }
+
+/* Inline (token) emphasis: on a paired old line the repeated text is grey and
+   only removed tokens are marked; the new line shows its text once, with added
+   tokens marked. Lines identical on both sides are muted. */
+.ln.paired.del, .pd-tree .side-old.paired { background: transparent; }
+.ln.paired.del .unchg, .pd-tree .side-old .unchg { color: var(--muted); opacity: 0.75; }
+.ln.paired.add { background: color-mix(in srgb, var(--add-bg) 45%, transparent); }
+.ln.paired.add .unchg, .pd-tree .side-new .unchg { color: var(--fg); }
+.ln .chg, .pd-tree .chg { border-radius: 3px; padding: 0 1px; }
+.ln.del .chg, .pd-tree .side-old .chg { background: color-mix(in srgb, var(--del-fg) 28%, transparent); color: var(--del-fg); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--del-fg) 50%, transparent); }
+.ln.add .chg, .pd-tree .side-new .chg { background: color-mix(in srgb, var(--add-fg) 28%, transparent); color: var(--add-fg); font-weight: 600; }
+.pd-tree .side-new.paired { background: color-mix(in srgb, var(--add-bg) 45%, transparent); }
+.pd-tree .side-old.same { background: transparent; color: var(--muted); opacity: 0.55; }
+.pd-tree .side-new.same { background: transparent; color: var(--fg); }
+.ln.paired.del .sign { opacity: 0.5; }

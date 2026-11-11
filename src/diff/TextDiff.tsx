@@ -1,10 +1,12 @@
-import { useState } from "react";
-import type { FilePatch } from "./parse.ts";
+import { useMemo, useState } from "react";
+import { annotateInline, type FilePatch } from "./parse.ts";
+import { Segs } from "./ProgramDiff.tsx";
 
 const LIMIT = 1500;
 
-export function TextDiff({ file }: { file: FilePatch }) {
+export function TextDiff({ file: raw }: { file: FilePatch }) {
   const [showAll, setShowAll] = useState(false);
+  const file = useMemo(() => annotateInline(raw), [raw]);
   if (file.binary) return <div className="empty">二进制文件</div>;
   if (file.hunks.length === 0) return <div className="empty">无文本改动（可能只是重命名或权限变化）</div>;
   const total = file.hunks.reduce((n, h) => n + h.lines.length, 0);
@@ -22,12 +24,12 @@ export function TextDiff({ file }: { file: FilePatch }) {
                 <td colSpan={3}>{h.header}</td>
               </tr>,
               ...lines.map((l, li) => (
-                <tr key={`${hi}-${li}`} className={`ln ${l.kind}`}>
+                <tr key={`${hi}-${li}`} className={`ln ${l.kind}${l.segs ? " paired" : ""}`}>
                   <td className="no">{l.oldNo ?? ""}</td>
                   <td className="no">{l.newNo ?? ""}</td>
                   <td className="code">
                     <span className="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "-" : " "}</span>
-                    {l.text}
+                    {l.segs ? <Segs segs={l.segs} /> : l.text}
                   </td>
                 </tr>
               )),

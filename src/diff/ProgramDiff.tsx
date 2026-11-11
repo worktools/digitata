@@ -78,13 +78,21 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
             l.marker ? `mk-${mkClass(l.marker)}` : "",
             l.side ? `side-${l.side}` : "",
             l.isSideHeader ? "side-header" : "",
+            l.same ? "same" : "",
+            l.segs ? "paired" : "",
             l.marker && l.depth === 4 && l.path?.[2] === "defs" ? "def-node" : "",
           ].join(" ");
           return (
             <div key={l.id} data-line={l.id} className={cls}>
               <span className="tree-prefix">{l.prefix}</span>
               {l.marker && <span className="marker">{l.marker} </span>}
-              {l.isSideHeader ? (l.side === "old" ? "− 旧 " : "+ 新 ") + l.text.trim() : l.text}
+              {l.isSideHeader ? (
+                (l.side === "old" ? "− 旧 " : "+ 新 ") + l.text.trim()
+              ) : l.segs ? (
+                <Segs segs={l.segs} />
+              ) : (
+                l.text
+              )}
             </div>
           );
         })}
@@ -101,4 +109,16 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
 
 function mkClass(m: Marker) {
   return { "+": "add", "-": "del", "~": "mod", "=": "same" }[m];
+}
+
+export function Segs({ segs }: { segs: { text: string; changed: boolean }[] }) {
+  return (
+    <>
+      {segs.map((s, i) => (
+        <span key={i} className={s.changed ? "chg" : "unchg"}>
+          {s.text}
+        </span>
+      ))}
+    </>
+  );
 }

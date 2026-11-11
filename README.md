@@ -35,6 +35,11 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 - `server/main.ts`：只监听 `127.0.0.1` 的薄 HTTP 层，拒绝非 localhost 的 Origin。
 - `src/diff/FileDiff.tsx`：按文件名分派渲染器；`.cirru`（除 `deps.cirru`）默认走 program diff，失败自动回退文本 diff。
 
+## Diff 样式
+
+改动行按“删除段 → 新增段”配对，做 token 级对比：旧行里和新行重复的部分显示为灰色，只标出被删的 token；新行完整显示一次，标出新增 token。
+program diff 的 `OLD@` / `NEW@` 子树同样逐行对齐：两边完全相同的行旧侧变灰、新侧不再高亮，相似的行只高亮变化的 token。
+
 ## 加载与缓存
 
 列表、PR 详情和 program diff 都走 stale-while-revalidate：先显示缓存（列表和详情存在 localStorage，刷新页面也在），后台更新，进度只在右下角提示，失败也只弹角落提示，不清空已有内容。

@@ -1,3 +1,5 @@
+import { alignLines, inlineDiff } from "./inline.ts";
+
 // Minimal parser for `git diff` / `gh pr diff` unified patches.
 
 export interface DiffLine {
@@ -5,6 +7,8 @@ export interface DiffLine {
   text: string;
   oldNo?: number;
   newNo?: number;
+  /** Token segments when this line pairs with a line on the other side. */
+  segs?: { text: string; changed: boolean }[];
 }
 
 export interface Hunk {
@@ -83,4 +87,41 @@ export function parsePatch(text: string): FilePatch[] {
     }
   }
   return files;
+}
+
+/**
+ * Pair each run of deleted lines with the run of added lines that follows it,
+ * and attach token segments so only the changed parts are emphasised.
+ */
+export function annotateInline(file: FilePatch) {
+  for (const h of file.hunks) {
+    const ls = h.lines;
+    let i = 0;
+    while (i < ls.length) {
+      if (ls[i].kind !== "del") {
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j < ls.length && ls[j].kind === "del") j++;
+      let k = j;
+      while (k < ls.length && ls[k].kind === "add") k++;
+      const dels = ls.slice(i, j);
+      const adds = ls.slice(j, k);
+      if (adds.length && dels.length * adds.length <= 40_000) {
+        const { oldToNew } = alignLines(
+          dels.map((l) => l.text),
+          adds.map((l) => l.text),
+        );
+        oldToNew.forEach((n, d) => {
+          if (n < 0) return;
+          const r = inlineDiff(dels[d].text, adds[n].text);
+          dels[d].segs = r.old;
+          adds[n].segs = r.new;
+        });
+      }
+      i = k;
+    }
+  }
+  return file;
 }
