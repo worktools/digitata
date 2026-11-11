@@ -30,8 +30,25 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
   }, [confirming, ack]);
 
   keyHandler.current = () => {};
-  if (job?.state === "done") return <div className="merge-panel done st-MERGED">已合并：{job.text}</div>;
-  if (pr.state !== "OPEN") return <div className={`merge-panel done st-${pr.state}`}>此 PR 状态：{pr.state}</div>;
+  const label = (
+    <span className="mb-title" title={pr.title}>
+      <span className="muted">#{pr.number}</span> {pr.title}
+    </span>
+  );
+  if (job?.state === "done")
+    return (
+      <div className="merge-panel done st-MERGED">
+        {label}
+        <span className="tag st-MERGED">已合并</span>
+      </div>
+    );
+  if (pr.state !== "OPEN")
+    return (
+      <div className={`merge-panel done st-${pr.state}`}>
+        {label}
+        <span className={`tag st-${pr.state}`}>{pr.state}</span>
+      </div>
+    );
 
   const warnings: string[] = [];
   if (pr.isDraft) warnings.push("PR 仍是草稿");
@@ -83,12 +100,18 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
 
   return (
     <div className="merge-panel">
-      <div className="merge-status">
+      {label}
+      <span className="merge-status" title={`mergeable: ${pr.mergeable || "?"} · state: ${pr.mergeStateStatus || "?"}${pr.reviewDecision ? ` · review: ${pr.reviewDecision}` : ""}`}>
         <ChecksBadge checks={pr.checks} />
-        <span>mergeable: {pr.mergeable || "?"}</span>
-        <span>state: {pr.mergeStateStatus || "?"}</span>
-        {pr.reviewDecision && <span>review: {pr.reviewDecision}</span>}
-      </div>
+        <span className={`tag ${needsAck ? "warn-tag" : ""}`}>{pr.mergeStateStatus || pr.mergeable || "?"}</span>
+        {pr.reviewDecision && <span className={`tag rv-${pr.reviewDecision}`}>{pr.reviewDecision.toLowerCase().replace("_", " ")}</span>}
+        {job?.state === "running" && <span className="tag merging">合并中，可先处理别的 PR</span>}
+        {job?.state === "failed" && (
+          <span className="tag merge-failed" title={job.text}>
+            上次合并失败
+          </span>
+        )}
+      </span>
       <div className="merge-actions">
         <select value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>
           {(Object.keys(METHOD_LABEL) as MergeMethod[]).map((m) => (
@@ -98,14 +121,12 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
           ))}
         </select>
         <label>
-          <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 删除远程分支
+          <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 删分支
         </label>
         <button className={`primary ${needsAck ? "warn" : ""}`} disabled={busy} onClick={() => { setConfirming(true); setAck(false); }}>
           {busy ? "合并中…" : <>合并… <kbd>M</kbd></>}
         </button>
       </div>
-      {job?.state === "running" && <div className="note">合并进行中，可以先去处理别的 PR，结果会在右下角提示。</div>}
-      {job?.state === "failed" && <div className="error">上次合并失败：{job.text}</div>}
       {confirming && (
         <div className="modal-backdrop" onClick={() => setConfirming(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>

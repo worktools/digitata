@@ -52,12 +52,20 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
             刷新
           </button>
         </div>
+      </header>
+      {/* Sticky bar: the merge controls stay reachable while scrolling the diff. */}
+      <div className="merge-bar">
         {pr ? (
           <MergePanel repo={repo} pr={pr} />
         ) : (
-          <div className="merge-panel muted">{detail.error ? <span className="error">{detail.error}</span> : "正在获取合并状态…"}</div>
+          <div className="merge-panel muted">
+            <span className="mb-title">
+              #{head.number} {head.title}
+            </span>
+            {detail.error ? <span className="error">{detail.error}</span> : "正在获取合并状态…"}
+          </div>
         )}
-      </header>
+      </div>
       {!pr ? null : (
       <>
       <nav className="tabs">
