@@ -1,0 +1,27 @@
+{
+  "name": "digitata",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local GitHub PR viewer and merger, backed by the gh CLI, with Calcit program diffs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "server": "node --watch server/main.ts",
+    "build": "vite build",
+    "start": "vite build && node server/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "packageManager": "yarn@4.18.0",
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

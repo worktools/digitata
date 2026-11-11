@@ -1,0 +1,120 @@
+import { useState } from "react";
+import type { MergeMethod, PRDetail } from "../shared/types.ts";
+import { api } from "./api.ts";
+import { ChecksBadge } from "./PRList.tsx";
+
+const METHOD_LABEL: Record<MergeMethod, string> = { squash: "Squash and merge", merge: "Merge commit", rebase: "Rebase and merge" };
+
+export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail; onMerged: () => void }) {
+  const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem("digitata.method") as MergeMethod) || "squash");
+  const [deleteBranch, setDeleteBranch] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [ack, setAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  if (pr.state !== "OPEN") return <div className={`merge-panel done st-${pr.state}`}>此 PR 状态：{pr.state}</div>;
+
+  const warnings: string[] = [];
+  if (pr.isDraft) warnings.push("PR 仍是草稿");
+  if (pr.checks.state === "failure") warnings.push(`${pr.checks.failure} 个检查失败`);
+  if (pr.checks.state === "pending") warnings.push(`${pr.checks.pending} 个检查还在运行`);
+  if (pr.mergeable === "CONFLICTING") warnings.push("存在合并冲突");
+  if (pr.mergeStateStatus && !["CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(pr.mergeStateStatus)) warnings.push(`合并状态：${pr.mergeStateStatus}`);
+  if (pr.reviewDecision === "CHANGES_REQUESTED") warnings.push("有 reviewer 要求修改");
+  const needsAck = warnings.length > 0;
+
+  const doMerge = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      localStorage.setItem("digitata.method", method);
+      const r = await api.merge(repo, pr.number, { method, deleteBranch, headRefOid: pr.headRefOid });
+      setResult({ ok: true, text: r.message });
+      setConfirming(false);
+      onMerged();
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="merge-panel">
+      <div className="merge-status">
+        <ChecksBadge checks={pr.checks} />
+        <span>mergeable: {pr.mergeable || "?"}</span>
+        <span>state: {pr.mergeStateStatus || "?"}</span>
+        {pr.reviewDecision && <span>review: {pr.reviewDecision}</span>}
+      </div>
+      <div className="merge-actions">
+        <select value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>
+          {(Object.keys(METHOD_LABEL) as MergeMethod[]).map((m) => (
+            <option key={m} value={m}>
+              {METHOD_LABEL[m]}
+            </option>
+          ))}
+        </select>
+        <label>
+          <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 删除远程分支
+        </label>
+        <button className={`primary ${needsAck ? "warn" : ""}`} onClick={() => { setConfirming(true); setAck(false); }}>
+          合并…
+        </button>
+      </div>
+      {result && <div className={result.ok ? "ok" : "error"}>{result.text}</div>}
+      {confirming && (
+        <div className="modal-backdrop" onClick={() => !busy && setConfirming(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>确认合并 #{pr.number}？</h3>
+            <p className="modal-title">{pr.title}</p>
+            <ul className="kv">
+              <li>仓库：{repo}</li>
+              <li>
+                {pr.headRefName} → {pr.baseRefName}
+              </li>
+              <li>方式：{METHOD_LABEL[method]}{deleteBranch ? "，合并后删除分支" : ""}</li>
+              <li>
+                head：<code>{pr.headRefOid.slice(0, 10)}</code>（若 PR 在此之后有新提交，合并会被拒绝）
+              </li>
+              <li>
+                CI：<ChecksBadge checks={pr.checks} />
+              </li>
+            </ul>
+            {pr.checkList.filter((c) => c.state === "failure" || c.state === "pending").length > 0 && (
+              <ul className="check-list compact">
+                {pr.checkList
+                  .filter((c) => c.state === "failure" || c.state === "pending")
+                  .map((c, i) => (
+                    <li key={i} className={`ck ck-${c.state}`}>
+                      {c.name} <span className="muted">{c.detail}</span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {needsAck && (
+              <div className="warnings">
+                {warnings.map((w) => (
+                  <div key={w}>⚠ {w}</div>
+                ))}
+                <label>
+                  <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 我已知晓，仍然合并
+                </label>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button onClick={() => setConfirming(false)} disabled={busy}>
+                取消
+              </button>
+              <button className="primary" disabled={busy || (needsAck && !ack)} onClick={doMerge}>
+                {busy ? "合并中…" : "确认合并"}
+              </button>
+            </div>
+            {result && !result.ok && <div className="error">{result.text}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
