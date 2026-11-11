@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { MergeMethod, PRDetail } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { mergeKey, startMerge, useMerges } from "./store.ts";
 import { ChecksBadge } from "./PRList.tsx";
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: "Squash and merge", merge: "Merge commit", rebase: "Rebase and merge" };
 
-export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail; onMerged: () => void }) {
+export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
   const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem("digitata.method") as MergeMethod) || "squash");
   const [deleteBranch, setDeleteBranch] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [ack, setAck] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const job = useMerges()[mergeKey(repo, pr.number)];
+  const busy = job?.state === "running";
 
   const confirmBtn = useRef<HTMLButtonElement>(null);
-  const busyRef = useRef(false);
   const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
 
   // Keyboard: "m" opens the dialog; inside it Enter merges, Esc cancels,
@@ -30,6 +30,7 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
   }, [confirming, ack]);
 
   keyHandler.current = () => {};
+  if (job?.state === "done") return <div className="merge-panel done st-MERGED">已合并：{job.text}</div>;
   if (pr.state !== "OPEN") return <div className={`merge-panel done st-${pr.state}`}>此 PR 状态：{pr.state}</div>;
 
   const warnings: string[] = [];
@@ -41,24 +42,14 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
   if (pr.reviewDecision === "CHANGES_REQUESTED") warnings.push("有 reviewer 要求修改");
   const needsAck = warnings.length > 0;
 
-  const doMerge = async () => {
-    // Ref guard: Enter on the focused button and the key handler must never both merge.
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setResult(null);
-    try {
-      localStorage.setItem("digitata.method", method);
-      const r = await api.merge(repo, pr.number, { method, deleteBranch, headRefOid: pr.headRefOid });
-      setResult({ ok: true, text: r.message });
-      setConfirming(false);
-      onMerged();
-    } catch (e) {
-      setResult({ ok: false, text: (e as Error).message });
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
+  // The merge runs in a global job, so the dialog closes at once and the user can
+  // move on to other PRs; progress and the result show in the corner and the list.
+  const doMerge = () => {
+    if (busy) return;
+    localStorage.setItem("digitata.method", method);
+    const body = { method, deleteBranch, headRefOid: pr.headRefOid };
+    startMerge(repo, pr.number, () => api.merge(repo, pr.number, body).then((r) => r.message));
+    setConfirming(false);
   };
 
   const canMerge = !busy && (!needsAck || ack);
@@ -68,16 +59,15 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
     const t = e.target as HTMLElement;
     const typing = t.tagName === "INPUT" && (t as HTMLInputElement).type !== "checkbox" || t.tagName === "TEXTAREA" || t.tagName === "SELECT";
     if (!confirming) {
-      if (e.key === "m" && !typing) {
+      if (e.key === "m" && !typing && !busy) {
         e.preventDefault();
         setConfirming(true);
         setAck(false);
-        setResult(null);
       }
       return;
     }
     if (e.key === "Escape") {
-      if (!busy) setConfirming(false);
+      setConfirming(false);
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (canMerge) doMerge();
@@ -110,13 +100,14 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
         <label>
           <input type="checkbox" checked={deleteBranch} onChange={(e) => setDeleteBranch(e.target.checked)} /> 删除远程分支
         </label>
-        <button className={`primary ${needsAck ? "warn" : ""}`} onClick={() => { setConfirming(true); setAck(false); setResult(null); }}>
-          合并… <kbd>M</kbd>
+        <button className={`primary ${needsAck ? "warn" : ""}`} disabled={busy} onClick={() => { setConfirming(true); setAck(false); }}>
+          {busy ? "合并中…" : <>合并… <kbd>M</kbd></>}
         </button>
       </div>
-      {result && <div className={result.ok ? "ok" : "error"}>{result.text}</div>}
+      {job?.state === "running" && <div className="note">合并进行中，可以先去处理别的 PR，结果会在右下角提示。</div>}
+      {job?.state === "failed" && <div className="error">上次合并失败：{job.text}</div>}
       {confirming && (
-        <div className="modal-backdrop" onClick={() => !busy && setConfirming(false)}>
+        <div className="modal-backdrop" onClick={() => setConfirming(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>确认合并 #{pr.number}？</h3>
             <p className="modal-title">{pr.title}</p>
@@ -167,14 +158,13 @@ export function MergePanel({ repo, pr, onMerged }: { repo: string; pr: PRDetail;
               </div>
             )}
             <div className="modal-actions">
-              <button onClick={() => setConfirming(false)} disabled={busy}>
+              <button onClick={() => setConfirming(false)}>
                 取消 <kbd>Esc</kbd>
               </button>
               <button ref={confirmBtn} className="primary" disabled={!canMerge} onClick={doMerge}>
-                {busy ? "合并中…" : "确认合并"} <kbd>Enter</kbd>
+                确认合并 <kbd>Enter</kbd>
               </button>
             </div>
-            {result && !result.ok && <div className="error">{result.text}</div>}
           </div>
         </div>
       )}

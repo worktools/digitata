@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator } from "./Activity.tsx";
 import { PRDetail } from "./PRDetail.tsx";
+import { onMergeDone } from "./store.ts";
 import { InboxList, PRList } from "./PRList.tsx";
 
 const DEFAULT_REPOS = ["calcit-lang/calcit"];
@@ -32,6 +33,9 @@ export function App() {
   useEffect(() => {
     localStorage.setItem("digitata.source", source);
   }, [source]);
+
+  // Any finished merge (possibly for a PR no longer open) refreshes the lists.
+  useEffect(() => onMergeDone(() => setReloadKey((k) => k + 1)), []);
 
   useEffect(() => {
     const on = () => setRoute(parseHash());
@@ -94,7 +98,7 @@ export function App() {
       </aside>
       <main>
         {route.num && route.repo ? (
-          <PRDetail key={`${repo}#${route.num}`} repo={repo} num={route.num} onChanged={() => setReloadKey((k) => k + 1)} />
+          <PRDetail key={`${repo}#${route.num}`} repo={repo} num={route.num} />
         ) : (
           <div className="empty big">从左侧选择一个 PR</div>
         )}

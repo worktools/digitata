@@ -52,4 +52,6 @@ CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标�
 
 合并前弹确认框，显示 CI 状态、mergeable / mergeStateStatus、review 结论；CI 失败、运行中、有冲突或草稿时需要额外勾选确认。
 键盘：PR 页按 `M` 打开确认框；框内 `Enter` 合并、`Esc` 取消、`1`/`2`/`3` 选方式、`D` 切换删除分支、`A` 确认警告。
+合并在后台任务里执行：确认后对话框立即关闭，可以马上切到别的 PR；列表上该 PR 显示“合并中 / 已合并 / 合并失败”，结果在右下角提示，完成后列表自动刷新。
+测试用：`DIGITATA_DRY_MERGE=1` 启动的服务不会调用 GitHub，合并请求等 5 秒后返回失败。
 合并请求带上页面看到的 head SHA（`gh pr merge --match-head-commit`），PR 在此之后有新提交会被拒绝。

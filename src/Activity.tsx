@@ -8,7 +8,7 @@ export function ActivityIndicator() {
   return (
     <div className="activity">
       {toasts.map((t) => (
-        <div key={t.id} className="toast">
+        <div key={t.id} className={`toast toast-${t.kind}`}>
           {t.text}
         </div>
       ))}

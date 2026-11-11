@@ -221,6 +221,11 @@ export class GhCliHost implements CodeHost {
     if (!/^[0-9a-f]{40}$/.test(req.headRefOid)) throw new Error("headRefOid must be a full commit SHA");
     const method = { squash: "--squash", merge: "--merge", rebase: "--rebase" }[req.method];
     if (!method) throw new Error(`unknown merge method ${req.method}`);
+    if (process.env.DIGITATA_DRY_MERGE) {
+      // Test mode: never calls GitHub; simulates a slow merge that fails.
+      await new Promise((r) => setTimeout(r, 5000));
+      throw new Error(`dry run: would merge ${repo}#${num} (${req.method})`);
+    }
     const args = ["pr", "merge", String(num), "-R", assertRepo(repo), method, "--match-head-commit", req.headRefOid];
     if (req.deleteBranch) args.push("--delete-branch");
     const out = await gh(args, 180_000);

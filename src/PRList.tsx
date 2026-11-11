@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChecksSummary, InboxFilter, PRSummary } from "../shared/types.ts";
 import { q as Q } from "./api.ts";
-import { prefetch, rememberSummaries, useCached } from "./store.ts";
+import { mergeKey, prefetch, rememberSummaries, useCached, useMerges } from "./store.ts";
 
 /** Refresh when reloadKey bumps (after a merge), but not on mount. */
 function useReload(reloadKey: number, refresh: () => void) {
@@ -89,6 +89,7 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
 export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () => void; onHover?: () => void; showRepo?: boolean }) {
   const { pr, selected, onSelect, onHover, showRepo } = props;
   const timer = useRef(0);
+  const job = useMerges()[mergeKey(pr.repo ?? pr.url.split("/").slice(3, 5).join("/"), pr.number)];
   return (
     <li
       className={selected ? "sel" : ""}
@@ -102,6 +103,9 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
         <span className="title">{pr.title}</span>
       </div>
       <div className="row2">
+        {job?.state === "running" && <span className="tag merging">合并中…</span>}
+        {job?.state === "done" && <span className="tag merged-local">已合并</span>}
+        {job?.state === "failed" && <span className="tag merge-failed">合并失败</span>}
         {pr.isDraft && <span className="tag draft">draft</span>}
         <ChecksBadge checks={pr.checks} />
         {pr.reviewDecision && <span className={`tag rv-${pr.reviewDecision}`}>{pr.reviewDecision.toLowerCase().replace("_", " ")}</span>}

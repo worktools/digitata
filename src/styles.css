@@ -225,3 +225,7 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .tag.type-narrowed { color: var(--add-fg); border-color: var(--add-fg); }
 .tag.type-changed { color: var(--mod-fg); border-color: var(--mod-fg); }
 .pd-tree .pl.wrap { white-space: pre-wrap; word-break: break-all; padding-left: 3em; text-indent: -2em; }
+.activity .toast-ok { color: var(--add-fg); }
+.tag.merging { color: var(--mod-fg); border-color: var(--mod-fg); }
+.tag.merged-local { color: #8250df; border-color: #8250df; }
+.tag.merge-failed { color: var(--del-fg); border-color: var(--del-fg); }

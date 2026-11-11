@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PRSummary } from "../shared/types.ts";
 import { q as Q } from "./api.ts";
-import { summaryOf, useCached } from "./store.ts";
+import { mergeKey, onMergeDone, summaryOf, useCached } from "./store.ts";
 import { FileDiff, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
 import { MergePanel } from "./MergePanel.tsx";
@@ -9,7 +9,7 @@ import { ChecksBadge, timeAgo } from "./PRList.tsx";
 
 type Tab = "files" | "overview" | "checks";
 
-export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; onChanged: () => void }) {
+export function PRDetail({ repo, num }: { repo: string; num: number }) {
   const [tab, setTab] = useState<Tab>("files");
   const qp = Q.pr(repo, num);
   const qd = Q.diff(repo, num);
@@ -24,6 +24,9 @@ export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; 
     detail.refresh();
     diff.refresh();
   };
+
+  // If this PR's background merge finishes while it is open, reload its state.
+  useEffect(() => onMergeDone((k) => k === mergeKey(repo, num) && refreshAll()), [repo, num]);
 
   if (!head) {
     if (detail.error) return <div className="error">{detail.error}</div>;
@@ -50,14 +53,7 @@ export function PRDetail({ repo, num, onChanged }: { repo: string; num: number; 
           </button>
         </div>
         {pr ? (
-          <MergePanel
-            repo={repo}
-            pr={pr}
-            onMerged={() => {
-              refreshAll();
-              onChanged();
-            }}
-          />
+          <MergePanel repo={repo} pr={pr} />
         ) : (
           <div className="merge-panel muted">{detail.error ? <span className="error">{detail.error}</span> : "正在获取合并状态…"}</div>
         )}

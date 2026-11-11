@@ -52,6 +52,7 @@ export interface Activity {
 export interface Toast {
   id: number;
   text: string;
+  kind: "error" | "ok";
 }
 
 let activities: Activity[] = [];
@@ -76,8 +77,8 @@ export function track<T>(label: string, p: Promise<T>): Promise<T> {
   return p;
 }
 
-export function toast(text: string) {
-  const t = { id: ++seq, text };
+export function toast(text: string, kind: Toast["kind"] = "error") {
+  const t = { id: ++seq, text, kind };
   toasts = [...toasts, t];
   emit();
   setTimeout(() => {
@@ -180,4 +181,50 @@ export function rememberSummaries(repo: string | null, prs: PRSummary[]) {
 }
 export function summaryOf(repo: string, num: number) {
   return summaries.get(`${repo}#${num}`);
+}
+
+// ---- merge jobs: run in the background, independent of which PR is open ----
+
+export interface MergeJob {
+  state: "running" | "done" | "failed";
+  text: string;
+}
+
+let merges: Record<string, MergeJob> = {};
+const mergeDoneListeners = new Set<(key: string) => void>();
+
+export const mergeKey = (repo: string, num: number) => `${repo}#${num}`;
+
+/** Start a merge; returns immediately. Duplicate starts for a running PR are ignored. */
+export function startMerge(repo: string, num: number, run: () => Promise<string>) {
+  const key = mergeKey(repo, num);
+  if (merges[key]?.state === "running") return;
+  const set = (j: MergeJob) => {
+    merges = { ...merges, [key]: j };
+    emit();
+  };
+  set({ state: "running", text: "合并中…" });
+  track(`合并 ${repo.split("/")[1]}#${num}`, run())
+    .then((msg) => {
+      set({ state: "done", text: msg || "已合并" });
+      toast(`✓ 已合并 ${key}`, "ok");
+      // Detail and lists are stale now; drop the detail cache and tell listeners to refresh.
+      mem.delete(`pr:${key}`);
+      mergeDoneListeners.forEach((l) => l(key));
+    })
+    .catch((e: Error) => {
+      set({ state: "failed", text: e.message });
+      toast(`合并 ${key} 失败：${e.message}`);
+    });
+}
+
+export function useMerges() {
+  return useSyncExternalStore(subscribe, () => merges);
+}
+
+export function onMergeDone(l: (key: string) => void) {
+  mergeDoneListeners.add(l);
+  return () => {
+    mergeDoneListeners.delete(l);
+  };
 }
