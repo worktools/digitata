@@ -35,6 +35,9 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
   if (!res) return <div className="loading">正在计算 program diff（首次需要 clone 仓库）…</div>;
   if (!res.ok || !parsed) return <div className="error">{res.error ?? "无法生成 program diff"}</div>;
 
+  const schemaMap = new Map((res.schema ?? []).map((x) => [x.def, x.direction]));
+  const schemaOf = (def: string) => schemaMap.get(def);
+
   const jump = (id: number) => {
     setShowSame(true);
     requestAnimationFrame(() => root.current?.querySelector(`[data-line="${id}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -47,6 +50,9 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
         <span>{res.meta.changes}</span>
         {res.meta.categories && <span className="muted">{res.meta.categories}</span>}
       </div>
+      {res.widening && res.widening.length > 0 && (
+        <div className="warn-box">⚠ {res.widening.length} 处类型签名放宽（widening），调用方可能收到更宽的类型</div>
+      )}
       {(parsed.defs.length > 0 || parsed.nsChanges.length > 0) && (
         <ul className="def-list">
           {parsed.nsChanges.map((d) => (
@@ -62,6 +68,7 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
                 {d.def}
               </code>
               {d.parts.length > 0 && <span className="muted parts"> {d.parts.join(", ")}</span>}
+              {schemaOf(`${d.ns}/${d.def}`) && <span className={`tag type-${schemaOf(`${d.ns}/${d.def}`)}`}>类型 {schemaOf(`${d.ns}/${d.def}`)}</span>}
             </li>
           ))}
         </ul>
@@ -82,6 +89,24 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
             l.segs ? "paired" : "",
             l.marker && l.depth === 4 && l.path?.[2] === "defs" ? "def-node" : "",
           ].join(" ");
+          if (l.change) {
+            const cont = l.prefix.replace(/[├└]── $/u, (m) => (m.startsWith("├") ? "│   " : "    ")) + "    ";
+            return (
+              <div key={l.id} data-line={l.id}>
+                <div className={cls}>
+                  <span className="tree-prefix">{l.prefix}</span>
+                  <span className="marker">~ </span>
+                  {l.change.key}
+                </div>
+                <div className="pl side-old paired wrap">
+                  <span className="tree-prefix">{cont}</span>− <Segs segs={l.change.old} />
+                </div>
+                <div className="pl side-new paired wrap">
+                  <span className="tree-prefix">{cont}</span>+ <Segs segs={l.change.new} />
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={l.id} data-line={l.id} className={cls}>
               <span className="tree-prefix">{l.prefix}</span>

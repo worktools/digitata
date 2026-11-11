@@ -81,6 +81,10 @@ export interface ProgramDiffResult {
   tree: string[];
   /** Notes / errors printed by the CLI. */
   notes: string[];
+  /** Definitions whose type signature (schema) changed, with direction (widened / narrowed / changed). */
+  schema?: { def: string; direction: string }[];
+  /** Schema slots that got wider, as reported by the CLI (risky for callers). */
+  widening?: unknown[];
   error?: string;
 }
 

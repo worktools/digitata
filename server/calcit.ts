@@ -85,6 +85,17 @@ export function programDiff(repo: string, num: number, path: string, baseSha: st
     await runOk("git", ["checkout", "-q", "--force", "--detach", headSha], { cwd: dir, timeoutMs: 600_000 });
     const r = await run(CALCIT, [path, "analyze", "program-diff", "--base", mergeBase, headSha], { cwd: dir, timeoutMs: 120_000 });
     const res = parseProgramDiff(path, r.stdout, r.stderr);
+    // The JSON format adds per-definition schema direction and widening evidence.
+    const j = await run(CALCIT, [path, "analyze", "program-diff", "--base", mergeBase, "--format", "json", headSha], { cwd: dir, timeoutMs: 120_000 });
+    try {
+      const ev = JSON.parse(j.stdout.slice(j.stdout.indexOf("{"))).data?.evidence;
+      res.schema = (ev?.changes ?? [])
+        .filter((c: { category?: string }) => c.category === "schema-signature")
+        .map((c: { definition: string; schema_direction?: string }) => ({ def: c.definition, direction: c.schema_direction ?? "changed" }));
+      res.widening = ev?.schema_widening ?? [];
+    } catch {
+      // keep the human output only
+    }
     if (r.code !== 0 || !res.ok) res.error = (r.stderr || r.stdout).trim().split("\n").slice(-5).join("\n") || `calcit exited ${r.code}`;
     return res;
   });

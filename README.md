@@ -40,6 +40,9 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 改动行按“删除段 → 新增段”配对，做 token 级对比：旧行里和新行重复的部分显示为灰色，只标出被删的 token；新行完整显示一次，标出新增 token。
 program diff 的 `OLD@` / `NEW@` 子树同样逐行对齐：两边完全相同的行旧侧变灰、新侧不再高亮，相似的行只高亮变化的 token。
 
+类型：定义的 schema（类型签名）变化会单独列出，拆成旧/新两行逐 token 对比，定义列表上标注“类型 changed/widened/narrowed”；
+CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标注（`assert-type`、`hint-fn` 等）作为代码树的一部分参与 diff。
+
 ## 加载与缓存
 
 列表、PR 详情和 program diff 都走 stale-while-revalidate：先显示缓存（列表和详情存在 localStorage，刷新页面也在），后台更新，进度只在右下角提示，失败也只弹角落提示，不清空已有内容。

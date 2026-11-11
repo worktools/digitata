@@ -36,6 +36,8 @@ export interface TreeLine {
   segs?: { text: string; changed: boolean }[];
   /** Identical to a line on the other side: show it muted, once. */
   same?: boolean;
+  /** A leaf value change printed as `key "old" -> "new"` (e.g. schema): shown as two diffed lines. */
+  change?: { key: string; old: { text: string; changed: boolean }[]; new: { text: string; changed: boolean }[] };
   /** Path of node names from the root, for node lines. */
   path?: string[];
 }
@@ -76,7 +78,9 @@ export function parseTree(raw: string[]): { lines: TreeLine[]; defs: DefChange[]
       stack[depth] = name;
       const marker = nm[1] as Marker;
       const path = stack.slice(1);
-      lines.push({ id, prefix, text: nm[2], marker, depth, path });
+      const cm = marker === "~" ? /^(\S+) (".*") -> (".*")$/.exec(nm[2]) : null;
+      const change = cm ? { key: cm[1], ...inlineDiff(cm[2], cm[3]) } : undefined;
+      lines.push({ id, prefix, text: nm[2], marker, depth, path, change });
       // files/<ns>/defs/<def>
       if (path[0] === "files" && path.length === 4 && path[2] === "defs" && marker !== "=") {
         defs.push({ ns: path[1], def: path[3], marker, lineId: id, parts: [] });

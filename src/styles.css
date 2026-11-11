@@ -219,3 +219,9 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .pd-tree .side-old.same { background: transparent; color: var(--muted); opacity: 0.55; }
 .pd-tree .side-new.same { background: transparent; color: var(--fg); }
 .ln.paired.del .sign { opacity: 0.5; }
+.warn-box { background: var(--mod-bg); color: var(--mod-fg); border-radius: 6px; padding: 6px 10px; font-size: 12px; margin-bottom: 8px; }
+.def-list .tag { margin-left: 6px; }
+.tag.type-widened, .tag.type-widening { color: var(--del-fg); border-color: var(--del-fg); }
+.tag.type-narrowed { color: var(--add-fg); border-color: var(--add-fg); }
+.tag.type-changed { color: var(--mod-fg); border-color: var(--mod-fg); }
+.pd-tree .pl.wrap { white-space: pre-wrap; word-break: break-all; padding-left: 3em; text-indent: -2em; }
