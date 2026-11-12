@@ -39,6 +39,11 @@ export function App() {
   // Back after a while: refetch the pending list in the background (old rows stay usable).
   useEffect(() => onResume(() => setReloadKey((k) => k + 1)), []);
 
+  // Switching PR starts the detail pane from the top.
+  useEffect(() => {
+    document.querySelector("main")?.scrollTo({ top: 0 });
+  }, [route.repo, route.num]);
+
   useEffect(() => {
     const on = () => setRoute(parseHash());
     window.addEventListener("hashchange", on);
