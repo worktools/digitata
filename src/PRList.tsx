@@ -106,6 +106,10 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
   const selIdx = prs ? prs.findIndex((p) => p.number === selected) : -1;
   const nextPr = prs ? (selIdx < 0 ? prs[0] : prs[selIdx + 1]) : undefined;
   useFirstShortcut(nextPr ? () => onSelect(nextPr.number) : null);
+  // Warm the PR that `n` would open next, so the jump is instant.
+  useEffect(() => {
+    if (nextPr) hoverPrefetch(repo, nextPr.number);
+  }, [repo, nextPr?.number]);
 
   return (
     <div className="pr-list">
@@ -207,6 +211,10 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
   const liveIdx = live.findIndex((p) => `${p.repo}#${p.number}` === selected);
   const nextLive = liveIdx < 0 ? live[0] : live[liveIdx + 1];
   useFirstShortcut(nextLive ? () => onSelect(nextLive.repo!, nextLive.number) : null);
+  // Warm the PR that `n` would open next (detail, diff and program diffs), so the jump is instant.
+  useEffect(() => {
+    if (nextLive) hoverPrefetch(nextLive.repo!, nextLive.number);
+  }, [nextLive?.url]);
 
   return (
     <div className="pr-list">
