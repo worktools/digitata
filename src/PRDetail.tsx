@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PRSummary } from "../shared/types.ts";
 import { prefetchProgramDiffs, q as Q } from "./api.ts";
-import { mergeKey, onMergeDone, summaryOf, useCached } from "./store.ts";
+import { mergeKey, onMergeDone, onResume, summaryOf, useCached } from "./store.ts";
 import { FileDiff, isNoise, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
 import { FileIndex } from "./FileIndex.tsx";
@@ -36,6 +36,8 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
   // Only the PR's state changes on merge; its diff does not, so skip refetching it
   // (re-diffing would re-render the whole file list for nothing).
   useEffect(() => onMergeDone((k) => k === mergeKey(repo, num) && detail.refresh()), [repo, num]);
+  // Back after a while: CI or review state may have changed.
+  useEffect(() => onResume(() => detail.refresh()), [repo, num]);
 
   if (!head) {
     if (detail.error) return <div className="error">{detail.error}</div>;

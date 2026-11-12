@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator } from "./Activity.tsx";
 import { PRDetail } from "./PRDetail.tsx";
-import { onMergeDone } from "./store.ts";
+import { onMergeDone, onResume } from "./store.ts";
 import { InboxList, PRList } from "./PRList.tsx";
 
 const DEFAULT_REPOS = ["calcit-lang/calcit"];
@@ -36,6 +36,8 @@ export function App() {
 
   // Any finished merge (possibly for a PR no longer open) refreshes the lists.
   useEffect(() => onMergeDone(() => setReloadKey((k) => k + 1)), []);
+  // Back after a while: refetch the pending list in the background (old rows stay usable).
+  useEffect(() => onResume(() => setReloadKey((k) => k + 1)), []);
 
   useEffect(() => {
     const on = () => setRoute(parseHash());

@@ -237,3 +237,31 @@ export function useBusy(label: string) {
   const { activities } = useActivity();
   return activities.some((a) => a.label === label);
 }
+
+// ---- resume: the tab comes back after being away for a while ----
+
+/** Away longer than this (ms) → refresh lists and the open PR when the page is visible again. */
+export const RESUME_AFTER_MS = 2 * 60_000;
+const resumeListeners = new Set<() => void>();
+let hiddenAt = document.visibilityState === "hidden" ? Date.now() : 0;
+
+function checkResume() {
+  if (document.visibilityState === "hidden") {
+    hiddenAt ||= Date.now();
+    return;
+  }
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  if (away >= RESUME_AFTER_MS) resumeListeners.forEach((l) => l());
+}
+document.addEventListener("visibilitychange", checkResume);
+// Window switches without a visibility change (another app in front) count too.
+window.addEventListener("blur", () => (hiddenAt ||= Date.now()));
+window.addEventListener("focus", checkResume);
+
+export function onResume(l: () => void) {
+  resumeListeners.add(l);
+  return () => {
+    resumeListeners.delete(l);
+  };
+}
