@@ -3,7 +3,7 @@ import type { DefCode } from "../../shared/types.ts";
 import { CirruTree } from "./CirruTree.tsx";
 import { q as Q } from "../api.ts";
 import { useCached } from "../store.ts";
-import { parseTree, type Marker, type TreeLine } from "./programTree.ts";
+import { parseTreeOf, type Marker, type TreeLine } from "./programTree.ts";
 
 
 export interface ProgramDiffProps {
@@ -30,7 +30,7 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
     reported.current = true;
   }, [res, err]);
 
-  const parsed = useMemo(() => (res?.ok ? parseTree(res.tree) : null), [res]);
+  const parsed = useMemo(() => (res?.ok ? parseTreeOf(res) : null), [res]);
   const codes = useMemo(() => new Map((res?.codes ?? []).map((c) => [c.key, c])), [res]);
 
   if (err) return <div className="error">program diff 失败：{err}</div>;
@@ -65,20 +65,6 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
         </label>
       </div>
       {res.widening && res.widening.length > 0 && <div className="warn-box">⚠ {res.widening.length} 处类型放宽（widening）</div>}
-      {(parsed.defs.length > 0 || parsed.nsChanges.length > 0) && (
-        <div className="def-chips">
-          {[...parsed.nsChanges, ...parsed.defs].map((d) => {
-            const dir = schemaOf(`${d.ns}/${d.def}`);
-            return (
-              <button key={d.lineId} className={`def-chip mk-${mkClass(d.marker)}`} onClick={() => jump(d.lineId)} title={`${d.ns}/${d.def} · ${d.parts.join(", ")}`}>
-                <span className="mk-glyph">{GLYPH[d.marker]}</span>
-                {d.def || d.ns}
-                {dir && <span className={`type-dot type-${dir}`} title={`类型 ${dir}`}>T</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
       {parsed.defs.length === 0 && parsed.nsChanges.length === 0 && <div className="empty">没有定义级改动</div>}
       {showSame ? <FullTree lines={parsed.lines} /> : <Blocks lines={parsed.lines} schemaOf={schemaOf} codes={codes} />}
       {res.notes.length > 0 && (

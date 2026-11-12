@@ -157,3 +157,14 @@ function annotateBlocks(lines: TreeLine[]) {
     });
   }
 }
+
+const parsedCache = new WeakMap<object, ReturnType<typeof parseTree>>();
+/** parseTree memoised per program-diff result (the diff view and the file index share it). */
+export function parseTreeOf(res: { tree: string[] }) {
+  let r = parsedCache.get(res);
+  if (!r) {
+    r = parseTree(res.tree);
+    parsedCache.set(res, r);
+  }
+  return r;
+}
