@@ -27,8 +27,15 @@ export function keyOf(x: Cirru): string {
   return k;
 }
 
+const sizes = new WeakMap<Cirru[], number>();
 export function size(x: Cirru): number {
-  return typeof x === "string" ? 1 : x.reduce((n, c) => n + size(c), 1);
+  if (typeof x === "string") return 1;
+  let n = sizes.get(x);
+  if (n === undefined) {
+    n = x.reduce((acc: number, c) => acc + size(c), 1);
+    sizes.set(x, n);
+  }
+  return n;
 }
 
 function lcs(a: string[], b: string[]): [number, number][] {
@@ -100,7 +107,16 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
 }
 
 /** The new-side shape of a diff node (old side for deletions), used for layout. */
+const shapes = new WeakMap<DNode, Cirru>();
 export function shapeOf(d: DNode): Cirru {
+  let x = shapes.get(d);
+  if (x === undefined) {
+    x = shapeOfRaw(d);
+    shapes.set(d, x);
+  }
+  return x;
+}
+function shapeOfRaw(d: DNode): Cirru {
   switch (d.t) {
     case "same":
     case "add":

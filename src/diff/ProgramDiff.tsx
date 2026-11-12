@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { DefCode } from "../../shared/types.ts";
 import { CirruTree } from "./CirruTree.tsx";
 import { q as Q } from "../api.ts";
@@ -31,6 +31,7 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
   }, [res, err]);
 
   const parsed = useMemo(() => (res?.ok ? parseTree(res.tree) : null), [res]);
+  const codes = useMemo(() => new Map((res?.codes ?? []).map((c) => [c.key, c])), [res]);
 
   if (err) return <div className="error">program diff 失败：{err}</div>;
   if (!res)
@@ -48,7 +49,6 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
     requestAnimationFrame(() => root.current?.querySelector(`[data-line="${id}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
 
-  const codes = new Map((res.codes ?? []).map((c) => [c.key, c]));
   const counts = parseCounts(res.meta.changes ?? "");
   const cls = res.meta.classification ?? "";
 
@@ -189,7 +189,7 @@ function Lazy({ children, minHeight }: { children: ReactNode; minHeight: number 
   return <div ref={ref}>{shown ? children : <div style={{ minHeight }} />}</div>;
 }
 
-function Blocks({ lines, schemaOf, codes }: { lines: TreeLine[]; schemaOf: (d: string) => string | undefined; codes: Map<string, DefCode> }) {
+const Blocks = memo(function Blocks({ lines, schemaOf, codes }: { lines: TreeLine[]; schemaOf: (d: string) => string | undefined; codes: Map<string, DefCode> }) {
   const blocks: { root: TreeLine; body: TreeLine[] }[] = [];
   let cur: { root: TreeLine; body: TreeLine[] } | null = null;
   for (const l of lines) {
@@ -285,7 +285,7 @@ function Blocks({ lines, schemaOf, codes }: { lines: TreeLine[]; schemaOf: (d: s
       })}
     </div>
   );
-}
+});
 
 function mkClass(m: Marker) {
   return { "+": "add", "-": "del", "~": "mod", "=": "same" }[m];

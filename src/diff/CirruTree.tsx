@@ -10,6 +10,9 @@ import { diffCirru, shapeOf, size, type DNode } from "./cirruDiff.ts";
 
 type Mode = "inline" | "inline-block" | "block";
 
+/** Inside added/removed cards, nested subtrees larger than this start folded. */
+const CARD_FOLD = 60;
+
 /** Calcit editor layout rule (see calcit-viewer `child-modes`). */
 function childModes(items: Cirru[]): Mode[] {
   const many = (x: Cirru, n: number) => Array.isArray(x) && (x.length > n || x.some((y) => Array.isArray(y)));
@@ -27,6 +30,11 @@ function childModes(items: Cirru[]): Mode[] {
   });
   return modes;
 }
+
+/** Tooltip computed on first hover, so large trees do not build every preview up front. */
+const tip = (make: () => string) => (e: { currentTarget: HTMLElement }) => {
+  if (!e.currentTarget.title) e.currentTarget.title = make();
+};
 
 /** One-line text of a subtree for tooltips. */
 function preview(x: Cirru, max = 80): string {
@@ -53,15 +61,15 @@ function Leaf({ s, head }: { s: string; head?: boolean }) {
 }
 
 /** Plain (unchanged) code; lists larger than `foldAt` start folded. */
-function Plain({ node, mode, head, foldAt }: { node: Cirru; mode: Mode; head?: boolean; foldAt: number }) {
-  const [open, setOpen] = useState(false);
+function Plain({ node, mode, head, foldAt, rootOpen }: { node: Cirru; mode: Mode; head?: boolean; foldAt: number; rootOpen?: boolean }) {
+  const [open, setOpen] = useState(!!rootOpen);
   if (typeof node === "string") return <Leaf s={node} head={head} />;
   if (node.length === 0) return <span className="ex ex-void" />;
   const n = size(node);
   if (n > foldAt && !open) {
     const h = typeof node[0] === "string" ? node[0] : "(…)";
     return (
-      <span className={`ex fold ${mode === "block" ? "ex-block" : "ex-inline"}`} onClick={() => setOpen(true)} title={`未改动：${preview(node)}（${n} 个节点，点击展开）`}>
+      <span className={`ex fold ${mode === "block" ? "ex-block" : "ex-inline"}`} onClick={() => setOpen(true)} onMouseEnter={tip(() => `未改动：${preview(node)}（${n} 个节点，点击展开）`)}>
         <span className="lf lf-head">{h}</span>
         <span className="fold-dots">⋯ {n}</span>
       </span>
@@ -71,7 +79,7 @@ function Plain({ node, mode, head, foldAt }: { node: Cirru; mode: Mode; head?: b
   return (
     <span className={`ex ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`}>
       {node.map((c, i) => (
-        <Plain key={i} node={c} mode={modes[i]} head={i === 0} foldAt={Infinity} />
+        <Plain key={i} node={c} mode={modes[i]} head={i === 0} foldAt={rootOpen ? foldAt : Infinity} />
       ))}
     </span>
   );
@@ -88,7 +96,7 @@ function Node({ d, mode, head, foldAt }: { d: DNode; mode: Mode; head?: boolean;
       );
     case "leaf":
       return (
-        <span className="leaf-chg" title={`修改：${d.old} → ${d.new}`}>
+        <span className="leaf-chg" onMouseEnter={tip(() => `修改：${d.old} → ${d.new}`)}>
           <span className="lf old">{d.old}</span>
           <span className="arrow">→</span>
           <span className="lf new">{d.new}</span>
@@ -99,26 +107,26 @@ function Node({ d, mode, head, foldAt }: { d: DNode; mode: Mode; head?: boolean;
       return (
         <span
           className={`card ${d.t === "add" ? "card-ins" : "card-rem"} ${mode === "block" ? "card-block" : ""}`}
-          title={`${d.t === "add" ? "新增" : "删除"}：${preview(d.node)}（${size(d.node)} 个节点）`}
+          onMouseEnter={tip(() => `${d.t === "add" ? "新增" : "删除"}：${preview(d.node)}（${size(d.node)} 个节点）`)}
         >
-          <Plain node={d.node} mode={mode === "block" ? "inline" : mode} head={head} foldAt={Infinity} />
+          <Plain node={d.node} mode={mode === "block" ? "inline" : mode} head={head} foldAt={CARD_FOLD} rootOpen />
         </span>
       );
     case "replace":
       return (
-        <span className={`replace ${mode === "block" ? "card-block" : ""}`} title={`替换：${preview(d.old)} → ${preview(d.new)}`}>
+        <span className={`replace ${mode === "block" ? "card-block" : ""}`} onMouseEnter={tip(() => `替换：${preview(d.old)} → ${preview(d.new)}`)}>
           <span className="card card-rem">
-            <Plain node={d.old} mode="inline" head={head} foldAt={Infinity} />
+            <Plain node={d.old} mode="inline" head={head} foldAt={CARD_FOLD} rootOpen />
           </span>
           <span className="card card-ins">
-            <Plain node={d.new} mode="inline" head={head} foldAt={Infinity} />
+            <Plain node={d.new} mode="inline" head={head} foldAt={CARD_FOLD} rootOpen />
           </span>
         </span>
       );
     case "list": {
       const modes = childModes(d.items.map(shapeOf));
       return (
-        <span className={`ex chg ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`} title={`内部有改动：${preview(shapeOf(d))}`}>
+        <span className={`ex chg ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`} onMouseEnter={tip(() => `内部有改动：${preview(shapeOf(d))}`)}>
           {d.items.map((c, i) => (
             <Node key={i} d={c} mode={c.t === "list" && modes[i] !== "inline" && size(shapeOf(c)) > 10 ? "block" : modes[i]} head={i === 0} foldAt={foldAt} />
           ))}

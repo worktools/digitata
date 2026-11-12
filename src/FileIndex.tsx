@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { programDiffLabel } from "./api.ts";
 import { isNoise, rendererFor } from "./diff/FileDiff.tsx";
 import { useActivity } from "./store.ts";
@@ -12,6 +12,13 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
   const [active, setActive] = useState(files[0]?.path ?? "");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("digitata.fi-collapsed") === "1");
   useEffect(() => localStorage.setItem("digitata.fi-collapsed", collapsed ? "1" : "0"), [collapsed]);
+  // Tell the layout whether the card is open (a class instead of a costly :has() selector over a big DOM).
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const layout = anchor.current?.parentElement;
+    layout?.classList.toggle("fi-open", !collapsed);
+    layout?.classList.toggle("fi-closed", collapsed);
+  }, [collapsed]);
 
   useEffect(() => {
     const main = document.querySelector("main");
@@ -45,7 +52,7 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
   return (
     // Zero-height sticky anchor: the card floats over the top-right of the code
     // without reserving a column, so the code keeps the full width below it.
-    <div className="fi-anchor">
+    <div className="fi-anchor" ref={anchor}>
     <nav className={`file-index ${collapsed ? "collapsed" : ""}`}>
       <div className="fi-head muted" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "展开文件列表" : "收起文件列表"}>
         {files.length} 个文件 <span className="add">+{total[0]}</span> <span className="del">−{total[1]}</span>

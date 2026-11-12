@@ -159,8 +159,8 @@ main { overflow: auto; min-width: 0; }
 .file-index .fi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-index .fi-prog { color: var(--accent); font-weight: 700; }
 /* Sticky file headers slide under the card; keep their controls clear of it. */
-.files-layout:has(.file-index:not(.collapsed)) .file-head { padding-right: 262px; }
-.files-layout:has(.file-index.collapsed) .file-head { padding-right: 150px; }
+.files-layout.fi-open .file-head { padding-right: 262px; }
+.files-layout.fi-closed .file-head { padding-right: 150px; }
 
 .status { font-size: 11px; font-family: var(--mono); color: var(--muted); }
 .status.st-added { color: var(--ins-fg); }
