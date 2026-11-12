@@ -15,7 +15,7 @@ function useReload(reloadKey: number, refresh: () => void) {
   }, [reloadKey]);
 }
 
-/** `n` opens the first PR of the list (ignored while typing or with a dialog open). */
+/** `n` opens the next PR after the selected one, or the first when the selected one is not in the list (ignored while typing or with a dialog open). */
 function useFirstShortcut(first: (() => void) | null) {
   const ref = useRef(first);
   ref.current = first;
@@ -103,7 +103,9 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
   const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
   useReload(reloadKey, refresh);
   useEffect(() => prs && rememberSummaries(repo, prs), [prs]);
-  useFirstShortcut(prs && prs.length ? () => onSelect(prs[0].number) : null);
+  const selIdx = prs ? prs.findIndex((p) => p.number === selected) : -1;
+  const nextPr = prs ? (selIdx < 0 ? prs[0] : prs[selIdx + 1]) : undefined;
+  useFirstShortcut(nextPr ? () => onSelect(nextPr.number) : null);
 
   return (
     <div className="pr-list">
@@ -201,8 +203,10 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
     })
     .sort((a, b) => (a.createdAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.updatedAt));
 
-  const firstLive = shown?.find((p) => merges[mergeKey(p.repo!, p.number)]?.state !== "done");
-  useFirstShortcut(firstLive ? () => onSelect(firstLive.repo!, firstLive.number) : null);
+  const live = shown?.filter((p) => merges[mergeKey(p.repo!, p.number)]?.state !== "done") ?? [];
+  const liveIdx = live.findIndex((p) => `${p.repo}#${p.number}` === selected);
+  const nextLive = liveIdx < 0 ? live[0] : live[liveIdx + 1];
+  useFirstShortcut(nextLive ? () => onSelect(nextLive.repo!, nextLive.number) : null);
 
   return (
     <div className="pr-list">
@@ -226,7 +230,7 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
           <button className="link" onClick={refresh}>
             刷新
           </button>
-          <span className="kbd-hint" title="按 N 打开列表第一个 PR">
+          <span className="kbd-hint" title="按 N 打开下一个 PR（当前不在列表中时打开第一个）">
             <kbd>N</kbd>
           </span>
         </div>
