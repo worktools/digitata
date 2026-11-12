@@ -86,6 +86,8 @@ export interface ProgramDiffResult {
   schema?: { def: string; direction: string }[];
   /** Schema slots that got wider, as reported by the CLI (risky for callers). */
   widening?: unknown[];
+  /** Code trees of definitions whose code changed, for the structural tree view. */
+  codes?: DefCode[];
   /** Cumulative ms at each server step (mergeBase, files, gitRepo, calcit). */
   timings?: Record<string, number>;
   error?: string;
@@ -93,3 +95,13 @@ export interface ProgramDiffResult {
 
 /** Inbox filters, mirroring github.com/pulls: authored, review requested, assigned. */
 export type InboxFilter = "all" | "author" | "review" | "assignee" | "mentioned";
+
+/** A Cirru tree: a leaf string or a list of nodes. */
+export type Cirru = string | Cirru[];
+
+/** Code of one definition before and after (absent when added/removed). `key` is `ns/def`, or `ns/:ns` for the ns form. */
+export interface DefCode {
+  key: string;
+  old?: Cirru;
+  new?: Cirru;
+}

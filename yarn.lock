@@ -335,6 +335,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"cirru-parser@npm:^0.10.8":
+  version: 0.10.8
+  resolution: "cirru-parser@npm:0.10.8"
+  checksum: 10c0/637eaabf38828f54bf14f01da2e957471a107692b1512c67bc403eb30c35131b5f82e8add5e9d834351b2fc6de4bf6808de97dff2c5f7c17ae53ba1bf7cdac18
+  languageName: node
+  linkType: hard
+
 "csstype@npm:^3.2.2":
   version: 3.2.3
   resolution: "csstype@npm:3.2.3"
@@ -357,6 +364,7 @@ __metadata:
     "@types/react": "npm:^19.3.0"
     "@types/react-dom": "npm:^19.3.0"
     "@vitejs/plugin-react": "npm:^6.3.0"
+    cirru-parser: "npm:^0.10.8"
     react: "npm:^19.3.1"
     react-dom: "npm:^19.3.1"
     typescript: "npm:^7.0.2"

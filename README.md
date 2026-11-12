@@ -47,6 +47,8 @@ CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标�
 
 锁文件（yarn.lock、Cargo.lock 等）、`.gitattributes` / `.gitignore`、`.yarn/`、压缩或生成产物（`*.min.js`、`js-out/`、`dist/`）默认折叠，文件列表里变灰。
 
+代码部分用结构化树渲染（参考 calcit-viewer / Calcit 编辑器的布局：短表达式行内、长或嵌套的成块并带左侧引导线）：服务端用 `cirru-parser` 读出两版 snapshot 中改动定义的代码树，前端按子节点 LCS 对齐做树 diff。未改动的分支折叠成 `head ⋯ N` 小块，点开展开；删除的代码在冷色卡片上，新增的在暖色卡片上；只改了一个叶子时就地显示 `旧→新`，不展开成多行。卡片只在接近视口时才渲染。
+
 ## 加载与缓存
 
 列表、PR 详情和 program diff 都走 stale-while-revalidate：先显示缓存（列表和详情存在 localStorage，刷新页面也在），后台更新，进度只在右下角提示，失败也只弹角落提示，不清空已有内容。

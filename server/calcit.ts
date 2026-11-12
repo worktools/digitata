@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ProgramDiffResult } from "../shared/types.ts";
 import { assertRepo } from "./gh.ts";
+import { changedCodes } from "./snapshot.ts";
 import { run, runOk } from "./run.ts";
 
 const CALCIT = process.env.DIGITATA_CALCIT ?? "calcit";
@@ -155,6 +156,8 @@ export async function programDiff(repo: string, num: number, path: string, baseS
     ]);
     lap("calcit");
     const res = parseProgramDiff(path, r.stdout, r.stderr);
+    res.codes = changedCodes(before, after);
+    lap("codes");
     res.timings = timings;
     console.log(`program-diff ${repo} ${path}: ${JSON.stringify(timings)}`);
     try {

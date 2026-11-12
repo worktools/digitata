@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { DefCode } from "../../shared/types.ts";
+import { CirruTree } from "./CirruTree.tsx";
 import { q as Q } from "../api.ts";
 import { useCached } from "../store.ts";
 import { parseTree, type Marker, type TreeLine } from "./programTree.ts";
@@ -46,6 +48,7 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
     requestAnimationFrame(() => root.current?.querySelector(`[data-line="${id}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
 
+  const codes = new Map((res.codes ?? []).map((c) => [c.key, c]));
   const counts = parseCounts(res.meta.changes ?? "");
   const cls = res.meta.classification ?? "";
 
@@ -77,7 +80,7 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
         </div>
       )}
       {parsed.defs.length === 0 && parsed.nsChanges.length === 0 && <div className="empty">没有定义级改动</div>}
-      {showSame ? <FullTree lines={parsed.lines} /> : <Blocks lines={parsed.lines} schemaOf={schemaOf} />}
+      {showSame ? <FullTree lines={parsed.lines} /> : <Blocks lines={parsed.lines} schemaOf={schemaOf} codes={codes} />}
       {res.notes.length > 0 && (
         <details className="notes">
           <summary>CLI 备注 {res.notes.length}</summary>
@@ -172,7 +175,21 @@ function isBlockRoot(l: TreeLine) {
  * each changed definition becomes a card with a coloured header, and its body
  * is re-indented relative to the definition.
  */
-function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) => string | undefined }) {
+/** Renders children only once the element is near the viewport (keeps big diffs responsive). */
+function Lazy({ children, minHeight }: { children: ReactNode; minHeight: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || shown) return;
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setShown(true), { rootMargin: "800px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown]);
+  return <div ref={ref}>{shown ? children : <div style={{ minHeight }} />}</div>;
+}
+
+function Blocks({ lines, schemaOf, codes }: { lines: TreeLine[]; schemaOf: (d: string) => string | undefined; codes: Map<string, DefCode> }) {
   const blocks: { root: TreeLine; body: TreeLine[] }[] = [];
   let cur: { root: TreeLine; body: TreeLine[] } | null = null;
   for (const l of lines) {
@@ -197,6 +214,19 @@ function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) 
         // folded out of the body, but the signature is useful context.
         const sch = body.find((l) => l.path?.[4] === "schema" && l.depth === root.depth! + 1);
         const sig = sch?.change ? null : sch && /^schema "(.*)"$/.exec(sch.text)?.[1];
+        const renderBodyLine = (l: TreeLine) => {
+          // Drop the definition's own indentation and the part-node column (code/schema/...).
+          const pre = [...l.prefix].slice(cut + 4).join("");
+          if (l.marker && l.depth === root.depth! + 1 && !l.change) {
+            return (
+              <div key={l.id} data-line={l.id} className="pl part">
+                <span className="part-label">{PART_LABEL[l.text.split(" ")[0]] ?? l.text.split(" ")[0]}</span>
+                {l.text.includes(" ") && <span className="muted"> {l.text.slice(l.text.indexOf(" ") + 1)}</span>}
+              </div>
+            );
+          }
+          return <Line key={l.id} l={l} prefix={pre} />;
+        };
         return (
           <section key={root.id} className={`pd-block mk-${mkClass(root.marker!)}`} data-line={root.id}>
             <header>
@@ -213,23 +243,35 @@ function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) 
               {root.marker === "+" && <span className="pill ins">新增</span>}
               {root.marker === "-" && <span className="pill rem">删除</span>}
             </header>
+            <Lazy minHeight={Math.min(600, 20 + body.length * 18)}>
             <pre className="pd-tree">
-              {body
-                .filter((l) => l.marker !== "=")
-                .map((l) => {
-                  // Drop the definition's own indentation and the part-node column (code/schema/...).
-                  const pre = [...l.prefix].slice(cut + 4).join("");
-                  if (l.marker && l.depth === root.depth! + 1 && !l.change) {
+              {(() => {
+                // Code parts of this definition render as a structural tree; the
+                // CLI's printed lines for that part are skipped.
+                const codeKey = p.length === 4 ? `${ns}/${p[3]}` : p[2] === "ns" ? `${ns}/:ns` : "";
+                const code = codes.get(codeKey);
+                if (code && p[2] === "ns") {
+                  return <CirruTree old={code.old} now={code.new} />;
+                }
+                let skipping = false;
+                return body.map((l) => {
+                  const partNode = l.marker !== undefined && l.depth === root.depth! + 1;
+                  if (partNode) skipping = false;
+                  if (skipping || l.marker === "=") return null;
+                  if (partNode && code && l.text.split(" ")[0] === "code") {
+                    skipping = true;
                     return (
-                      <div key={l.id} data-line={l.id} className="pl part">
-                        <span className="part-label">{PART_LABEL[l.text.split(" ")[0]] ?? l.text.split(" ")[0]}</span>
-                        {l.text.includes(" ") && <span className="muted"> {l.text.slice(l.text.indexOf(" ") + 1)}</span>}
+                      <div key={l.id} data-line={l.id} className="pl part tree-part">
+                        <span className="part-label">代码</span>
+                        <CirruTree old={code.old} now={code.new} />
                       </div>
                     );
                   }
-                  return <Line key={l.id} l={l} prefix={pre} />;
-                })}
+                  return renderBodyLine(l);
+                });
+              })()}
             </pre>
+            </Lazy>
           </section>
         );
       })}
