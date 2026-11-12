@@ -107,4 +107,7 @@ export interface DefCode {
   /** Schema trees, present only when the schema changed. */
   oldSchema?: Cirru;
   newSchema?: Cirru;
+  /** Example list and `(name code)` test list, present only when they changed. */
+  examples?: { old?: Cirru; new?: Cirru };
+  tests?: { old?: Cirru; new?: Cirru };
 }

@@ -24,6 +24,28 @@ function quoted(entry: Cirru | undefined, key: string): Cirru | undefined {
 interface Entry {
   code?: Cirru;
   schema?: Cirru;
+  examples?: Cirru;
+  tests?: Cirru;
+}
+
+const unquote = (v: Cirru | undefined) => (isList(v) && v[0] === "quote" ? v[1] : v);
+
+/** `:examples $ [] (quote …) …` → list of example trees. */
+function examplesOf(entry: Cirru | undefined): Cirru | undefined {
+  const f = field(entry, ":examples");
+  if (!isList(f) || !isList(f[1])) return undefined;
+  return f[1].slice(1).map((x) => unquote(x) ?? []);
+}
+
+/** `:tests $ [] (%{} 'TestEntry (:name |n) (:code $ quote …)) …` → list of `(name code)` pairs. */
+function testsOf(entry: Cirru | undefined): Cirru | undefined {
+  const f = field(entry, ":tests");
+  if (!isList(f) || !isList(f[1])) return undefined;
+  return f[1].slice(1).map((t) => {
+    const n = field(t, ":name");
+    const nameLeaf = isList(n) && typeof n[1] === "string" ? n[1] : "|?";
+    return [nameLeaf, quoted(t, ":code") ?? []];
+  });
 }
 
 /** Map of `ns/def` (and `ns/:ns` for the ns form) to its code and schema trees. */
@@ -42,7 +64,12 @@ export function snapshotCodes(text: string): Map<string, Entry> {
     if (!isList(defs) || !isList(defs[1])) continue;
     for (const d of defs[1].slice(1)) {
       if (!isList(d) || d.length < 2) continue;
-      out.set(`${ns}/${name(d[0])}`, { code: quoted(d[1], ":code"), schema: quoted(d[1], ":schema") });
+      out.set(`${ns}/${name(d[0])}`, {
+        code: quoted(d[1], ":code"),
+        schema: quoted(d[1], ":schema"),
+        examples: examplesOf(d[1]),
+        tests: testsOf(d[1]),
+      });
     }
   }
   return out;
@@ -66,12 +93,16 @@ export function changedCodes(before: string, after: string): DefCode[] {
     const y = b.get(key);
     const codeSame = same(x?.code, y?.code);
     const schemaSame = same(x?.schema, y?.schema);
-    if (x && y && codeSame && schemaSame) continue;
+    const examplesSame = same(x?.examples, y?.examples);
+    const testsSame = same(x?.tests, y?.tests);
+    if (x && y && codeSame && schemaSame && examplesSame && testsSame) continue;
     out.push({
       key,
       old: x?.code,
       new: y?.code,
       ...(schemaSame ? {} : { oldSchema: x?.schema, newSchema: y?.schema }),
+      ...(examplesSame ? {} : { examples: { old: x?.examples, new: y?.examples } }),
+      ...(testsSame ? {} : { tests: { old: x?.tests, new: y?.tests } }),
     });
   }
   return out;

@@ -266,6 +266,17 @@ const Blocks = memo(function Blocks({ lines, schemaOf, codes }: { lines: TreeLin
                       </div>
                     );
                   }
+                  const part = l.text.split(" ")[0];
+                  const pair = part === "examples" ? code?.examples : part === "tests" ? code?.tests : undefined;
+                  if (partNode && pair) {
+                    skipping = true;
+                    return (
+                      <div key={l.id} data-line={l.id} className="pl part tree-part">
+                        <span className="part-label">{PART_LABEL[part]}</span>
+                        <CirruTree old={pair.old} now={pair.new} />
+                      </div>
+                    );
+                  }
                   if (partNode && code && l.text.split(" ")[0] === "code") {
                     skipping = true;
                     return (
