@@ -386,10 +386,16 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .cirru-tree .fold .lf { margin-right: 4px; font-weight: 400; }
 .cirru-tree .fold:hover { color: var(--fg); }
 .cirru-tree .fold-dots { font-size: 11px; }
-.cirru-tree .card { border-radius: 5px; padding: 1px 4px 1px 6px; margin-right: 6px; }
-.cirru-tree .card-ins { background: var(--ins-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ins-fg) 35%, transparent); }
-.cirru-tree .card-rem { background: var(--rem-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rem-fg) 35%, transparent); }
-.cirru-tree .card-rem .lf { color: var(--rem-fg); }
+/* Added / removed cards: a solid side bar with a +/− mark, tinted fill and tinted text, so the kind of change reads at a glance. */
+.cirru-tree .card { position: relative; border-radius: 5px; padding: 1px 6px 1px 18px; margin-right: 6px; border-left: 3px solid; }
+.cirru-tree .card::before { position: absolute; left: 4px; top: 1px; font-weight: 800; font-size: 12px; line-height: 1.75; }
+.cirru-tree .card-ins { border-left-color: var(--ins-fg); background: color-mix(in srgb, var(--ins-fg) 16%, var(--bg)); }
+.cirru-tree .card-ins::before { content: "+"; color: var(--ins-fg); }
+.cirru-tree .card-ins .lf { color: color-mix(in srgb, var(--ins-fg) 55%, var(--fg)); }
+.cirru-tree .card-rem { border-left-color: var(--rem-fg); background: color-mix(in srgb, var(--rem-fg) 13%, var(--bg)); }
+.cirru-tree .card-rem::before { content: "−"; color: var(--rem-fg); }
+.cirru-tree .card-rem .lf { color: color-mix(in srgb, var(--rem-fg) 60%, var(--muted)); }
+.cirru-tree .card .ex-ib, .cirru-tree .card .ex-block { border-color: color-mix(in srgb, currentColor 25%, transparent); }
 .cirru-tree .card-block { display: block; width: fit-content; max-width: 100%; margin: 3px 0 3px 12px; }
 .cirru-tree .replace.card-block { display: flex; flex-direction: column; gap: 3px; width: fit-content; }
 .cirru-tree .replace.card-block > .card { display: block; }
