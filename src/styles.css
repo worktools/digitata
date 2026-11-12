@@ -330,3 +330,17 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .pd-block header .sig::before { content: ":: "; color: var(--muted); }
 .pd-tree .side-old.wrap .ty-name, .pd-tree .side-old.wrap .ty-var { color: inherit; }
 .file-index li.noise a { opacity: 0.55; }
+
+/* ---- program diff in progress: amber, animated, distinct from content ---- */
+.pd-loading { margin: 10px 12px; padding: 10px 14px; border-radius: 6px; display: flex; gap: 10px; align-items: center; font-size: 13px; font-weight: 600;
+  color: var(--mod-fg); border: 1px dashed color-mix(in srgb, var(--mod-fg) 60%, transparent);
+  background: repeating-linear-gradient(-45deg, var(--mod-bg) 0 12px, color-mix(in srgb, var(--mod-bg) 55%, transparent) 12px 24px);
+  background-size: 34px 34px; animation: pd-stripes 1s linear infinite; }
+@keyframes pd-stripes { to { background-position: 34px 0; } }
+.pd-loading .spinner, .pill.computing .spinner { border-top-color: var(--mod-fg); }
+.pill.computing { color: var(--mod-fg); background: color-mix(in srgb, var(--mod-fg) 16%, transparent); display: inline-flex; gap: 5px; align-items: center; }
+.pill.computing .spinner { width: 8px; height: 8px; }
+.file.computing { border-color: color-mix(in srgb, var(--mod-fg) 70%, transparent); }
+.file.computing > .file-head { box-shadow: inset 3px 0 var(--mod-fg); }
+.fi-spin { width: 8px; height: 8px; border-top-color: var(--mod-fg); }
+@media (prefers-reduced-motion: reduce) { .pd-loading { animation: none; } }

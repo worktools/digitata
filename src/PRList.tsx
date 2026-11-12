@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChecksSummary, PRSummary } from "../shared/types.ts";
-import { q as Q } from "./api.ts";
-import { mergeKey, prefetch, rememberSummaries, useCached, useMerges } from "./store.ts";
+import type { ChecksSummary, PRDetail, PRSummary } from "../shared/types.ts";
+import { prefetchProgramDiffs, q as Q } from "./api.ts";
+import { load, mergeKey, peek, prefetch, rememberSummaries, useCached, useMerges } from "./store.ts";
 
 /** Refresh when reloadKey bumps (after a merge), but not on mount. */
 function useReload(reloadKey: number, refresh: () => void) {
@@ -19,7 +19,12 @@ function useReload(reloadKey: number, refresh: () => void) {
 function hoverPrefetch(repo: string, num: number) {
   const a = Q.pr(repo, num);
   const b = Q.diff(repo, num);
-  prefetch(a.key, a.fetch, a.opts);
+  // Detail first: its SHAs let the (slowest) program diffs start right away.
+  const cached = peek<PRDetail>(a.key, true);
+  if (cached) prefetchProgramDiffs(repo, cached);
+  load(a.key, a.fetch, a.opts)
+    .then((pr) => prefetchProgramDiffs(repo, pr))
+    .catch(() => {});
   prefetch(b.key, b.fetch, b.opts);
 }
 

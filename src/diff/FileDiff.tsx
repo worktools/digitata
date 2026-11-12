@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { programDiffLabel } from "../api.ts";
+import { useBusy } from "../store.ts";
 import type { FilePatch } from "./parse.ts";
 import { ProgramDiff } from "./ProgramDiff.tsx";
 import { TextDiff } from "./TextDiff.tsx";
@@ -51,17 +53,23 @@ export function rendererFor(file: FilePatch) {
 
 export function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: DiffContext; defaultOpen: boolean }) {
   const special = rendererFor(file);
+  const busy = useBusy(programDiffLabel(file.path));
   const [open, setOpen] = useState(defaultOpen);
   const [view, setView] = useState<string>(special ? special.id : "text");
   const [fallbackNote, setFallbackNote] = useState("");
 
   return (
-    <section className="file" id={`file-${file.path}`}>
+    <section className={`file ${special && busy ? "computing" : ""}`} id={`file-${file.path}`}>
       <header className="file-head" onClick={() => setOpen(!open)}>
         <span className="caret">{open ? "▾" : "▸"}</span>
         <span className={`status st-${file.status}`}>{file.status}</span>
         <code className="file-path">{file.path}</code>
         {isNoise(file.path) && !open && <span className="pill unknown">已折叠</span>}
+        {special && busy && (
+          <span className="pill computing">
+            <span className="spinner" /> 计算中
+          </span>
+        )}
         <span className="stat">
           <span className="add">+{file.additions}</span> <span className="del">−{file.deletions}</span>
         </span>

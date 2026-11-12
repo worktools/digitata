@@ -123,6 +123,7 @@ export function load<T>(key: string, fetcher: () => Promise<T>, opts: FetchOpts)
 
 /** Warm the cache (e.g. on hover) unless the key was fetched recently. */
 export function prefetch<T>(key: string, fetcher: () => Promise<T>, opts: FetchOpts, maxAgeMs = 60_000) {
+  if (opts.persist && peek(key, true) !== undefined && opts.immutable) return;
   const e = mem.get(key);
   if (e && (opts.immutable || Date.now() - e.at < maxAgeMs)) return;
   load(key, fetcher, opts).catch(() => {});
@@ -229,4 +230,10 @@ export function onMergeDone(l: (key: string) => void) {
   return () => {
     mergeDoneListeners.delete(l);
   };
+}
+
+/** True while a request with this exact label is in flight (e.g. a program diff). */
+export function useBusy(label: string) {
+  const { activities } = useActivity();
+  return activities.some((a) => a.label === label);
 }

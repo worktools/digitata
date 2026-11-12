@@ -31,7 +31,12 @@ export function ProgramDiff({ repo, num, path, baseSha, headSha, onUnavailable }
   const parsed = useMemo(() => (res?.ok ? parseTree(res.tree) : null), [res]);
 
   if (err) return <div className="error">program diff 失败：{err}</div>;
-  if (!res) return <div className="loading">正在计算 program diff（首次需要 clone 仓库）…</div>;
+  if (!res)
+    return (
+      <div className="pd-loading">
+        <span className="spinner" /> 正在计算 program diff…
+      </div>
+    );
   if (!res.ok || !parsed) return <div className="error">{res.error ?? "无法生成 program diff"}</div>;
 
   const schemaMap = new Map((res.schema ?? []).map((x) => [x.def, x.direction]));

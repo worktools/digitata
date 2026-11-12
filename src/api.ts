@@ -1,3 +1,4 @@
+import { prefetch } from "./store.ts";
 import type { InboxFilter, MergeRequest, PRDetail, PRSummary, ProgramDiffResult } from "../shared/types.ts";
 
 async function req<T>(url: string, init?: RequestInit, as: "json" | "text" = "json"): Promise<T> {
@@ -57,6 +58,23 @@ export const q = {
   programDiff: (repo: string, num: number, path: string, baseSha: string, head: string) => ({
     key: `pd3:${repo}:${path}:${baseSha}:${head}`,
     fetch: () => api.programDiff(repo, num, path, baseSha, head),
-    opts: { label: `program diff ${path.split("/").pop()}`, persist: true, immutable: true },
+    opts: { label: programDiffLabel(path), persist: true, immutable: true },
   }),
 };
+
+/** Calcit snapshot files get a program diff (deps.cirru is a manifest). */
+export const isProgramPath = (path: string) => path.endsWith(".cirru") && !path.endsWith("deps.cirru");
+
+/**
+ * Start program diffs for a PR's snapshot files as soon as its head/base are
+ * known, so they are usually ready by the time the file is scrolled to.
+ */
+export function prefetchProgramDiffs(repo: string, pr: PRDetail) {
+  for (const f of pr.files) {
+    if (!isProgramPath(f.path)) continue;
+    const x = q.programDiff(repo, pr.number, f.path, pr.baseRefOid, pr.headRefOid);
+    prefetch(x.key, x.fetch, x.opts);
+  }
+}
+
+export const programDiffLabel = (path: string) => `program diff ${path}`;

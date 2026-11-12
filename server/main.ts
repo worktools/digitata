@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { InboxFilter, MergeRequest } from "../shared/types.ts";
-import { programDiff } from "./calcit.ts";
+import { programDiff, rememberPatch } from "./calcit.ts";
 import { GhCliHost } from "./gh.ts";
 import type { CodeHost } from "./host.ts";
 
@@ -62,7 +62,13 @@ const server = createServer(async (req, res) => {
       return send(res, 200, await host.listPRs(repo, { state, search }));
     }
     if (num !== undefined && !action && req.method === "GET") return send(res, 200, await host.getPR(repo, num));
-    if (num !== undefined && action === "diff" && req.method === "GET") return send(res, 200, await host.getDiff(repo, num), "text/plain; charset=utf-8");
+    if (num !== undefined && action === "diff" && req.method === "GET") {
+      const diff = host.getDiff(repo, num);
+      // Program diffs for this PR reuse the patch instead of fetching the merge-base file.
+      const head = url.searchParams.get("head");
+      if (head && /^[0-9a-f]{40}$/.test(head)) rememberPatch(repo, num, head, diff);
+      return send(res, 200, await diff, "text/plain; charset=utf-8");
+    }
     if (num !== undefined && action === "program-diff" && req.method === "GET") {
       const p = url.searchParams.get("path") ?? "";
       const base = url.searchParams.get("base") ?? "";

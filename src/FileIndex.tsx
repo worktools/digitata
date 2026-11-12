@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { programDiffLabel } from "./api.ts";
 import { isNoise, rendererFor } from "./diff/FileDiff.tsx";
+import { useActivity } from "./store.ts";
 import type { FilePatch } from "./diff/parse.ts";
 
 /**
@@ -36,6 +38,8 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
     };
   }, [files]);
 
+  const { activities } = useActivity();
+  const busy = new Set(activities.map((a) => a.label));
   const total = files.reduce((a, f) => [a[0] + f.additions, a[1] + f.deletions], [0, 0]);
 
   return (
@@ -65,7 +69,12 @@ export function FileIndex({ files }: { files: FilePatch[] }) {
                   <span className="muted">{dir}</span>
                   {name}
                 </span>
-                {rendererFor(f) && <span className="fi-prog" title="program diff">ƒ</span>}
+                {rendererFor(f) &&
+                  (busy.has(programDiffLabel(f.path)) ? (
+                    <span className="spinner fi-spin" title="program diff 计算中" />
+                  ) : (
+                    <span className="fi-prog" title="program diff">ƒ</span>
+                  ))}
                 <span className="stat">
                   <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
                 </span>

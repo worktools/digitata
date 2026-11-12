@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PRSummary } from "../shared/types.ts";
-import { q as Q } from "./api.ts";
+import { prefetchProgramDiffs, q as Q } from "./api.ts";
 import { mergeKey, onMergeDone, summaryOf, useCached } from "./store.ts";
 import { FileDiff, isNoise, rendererFor } from "./diff/FileDiff.tsx";
 import { parsePatch, type FilePatch } from "./diff/parse.ts";
@@ -17,6 +17,10 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
   const detail = useCached(qp.key, qp.fetch, qp.opts);
   const diff = useCached(qd.key, qd.fetch, qd.opts);
   const pr = detail.data;
+  // Kick off program diffs as soon as the SHAs are known, not when the file renders.
+  useEffect(() => {
+    if (pr) prefetchProgramDiffs(repo, pr);
+  }, [pr?.headRefOid, pr?.baseRefOid]);
   const viewer = useViewer();
   // Until the full detail arrives, the row seen in the list gives an instant header.
   const head: PRSummary | undefined = pr ?? summaryOf(repo, num);

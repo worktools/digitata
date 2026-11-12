@@ -86,6 +86,8 @@ export interface ProgramDiffResult {
   schema?: { def: string; direction: string }[];
   /** Schema slots that got wider, as reported by the CLI (risky for callers). */
   widening?: unknown[];
+  /** Cumulative ms at each server step (mergeBase, files, gitRepo, calcit). */
+  timings?: Record<string, number>;
   error?: string;
 }
 

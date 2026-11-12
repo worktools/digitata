@@ -31,7 +31,7 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 
 - `server/host.ts`：`CodeHost` 接口（`inbox` / `listPRs` / `getPR` / `getDiff` / `merge`）。
 - `server/gh.ts`：基于 `gh pr list/view --json`、`gh pr diff`、`gh pr merge` 的实现。以后换成直接调 REST/GraphQL 只需另写一个实现。
-- `server/calcit.ts`：不 clone 仓库：用 GitHub API 取 merge-base 和 head 两个版本的文件，放进临时的两提交 git 仓库里跑 `calcit analyze program-diff`，用完即删。
+- `server/calcit.ts`：不 clone 仓库。head 版本用 GitHub API 取；base（merge-base）版本两路竞速取最快的：一路把 PR patch 反向应用到 head 版本上（一次往返），一路先查 merge-base 再取文件（两次往返）。两个版本放进临时两提交仓库跑 `calcit analyze program-diff`。打开 PR 或悬停时就提前开始计算。
 - `server/main.ts`：只监听 `127.0.0.1` 的薄 HTTP 层，拒绝非 localhost 的 Origin。
 - `src/diff/FileDiff.tsx`：按文件名分派渲染器；`.cirru`（除 `deps.cirru`）默认走 program diff，失败自动回退文本 diff。
 
