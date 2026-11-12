@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { programDiffLabel } from "../api.ts";
 import { useBusy } from "../store.ts";
 import type { FilePatch } from "./parse.ts";
@@ -51,12 +51,28 @@ export function rendererFor(file: FilePatch) {
   return renderers.find((r) => r.matches(file));
 }
 
-export function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: DiffContext; defaultOpen: boolean }) {
+export const FileDiff = memo(function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: DiffContext; defaultOpen: boolean }) {
   const special = rendererFor(file);
   const busy = useBusy(programDiffLabel(file.path));
   const [open, setOpen] = useState(defaultOpen);
   const [view, setView] = useState<string>(special ? special.id : "text");
   const [fallbackNote, setFallbackNote] = useState("");
+  const fallback = useCallback((reason: string) => {
+    setFallbackNote(reason);
+    setView("text");
+  }, []);
+  // The body is memoised so header-only updates (e.g. the "computing" badge)
+  // do not re-render a large diff.
+  const body = useMemo(
+    () =>
+      open ? (
+        <div className="file-body">
+          {fallbackNote && view === "text" && <div className="note">已回退到文本 diff：{fallbackNote}</div>}
+          {special && view === special.id ? special.render(file, ctx, fallback) : <TextDiff file={file} />}
+        </div>
+      ) : null,
+    [open, view, fallbackNote, file, ctx.repo, ctx.num, ctx.baseSha, ctx.headSha],
+  );
 
   return (
     <section className={`file ${special && busy ? "computing" : ""}`} id={`file-${file.path}`}>
@@ -90,17 +106,7 @@ export function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: Dif
           </span>
         )}
       </header>
-      {open && (
-        <div className="file-body">
-          {fallbackNote && view === "text" && <div className="note">已回退到文本 diff：{fallbackNote}</div>}
-          {special && view === special.id
-            ? special.render(file, ctx, (reason) => {
-                setFallbackNote(reason);
-                setView("text");
-              })
-            : <TextDiff file={file} />}
-        </div>
-      )}
+      {body}
     </section>
   );
-}
+});

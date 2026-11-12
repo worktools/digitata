@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { annotateInline, type FilePatch } from "./parse.ts";
 import { Segs } from "./ProgramDiff.tsx";
 
 const LIMIT = 1500;
 
-export function TextDiff({ file: raw }: { file: FilePatch }) {
+export const TextDiff = memo(function TextDiff({ file: raw }: { file: FilePatch }) {
   const [showAll, setShowAll] = useState(false);
   const file = useMemo(() => annotateInline(raw), [raw]);
   if (file.binary) return <div className="empty">二进制文件</div>;
@@ -44,4 +44,4 @@ export function TextDiff({ file: raw }: { file: FilePatch }) {
       )}
     </div>
   );
-}
+});

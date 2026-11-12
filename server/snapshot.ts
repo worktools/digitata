@@ -21,9 +21,14 @@ function quoted(entry: Cirru | undefined, key: string): Cirru | undefined {
   return isList(v) && v[0] === "quote" ? v[1] : v;
 }
 
-/** Map of `ns/def` (and `ns/:ns` for the ns form) to its code tree. */
-export function snapshotCodes(text: string): Map<string, Cirru> {
-  const out = new Map<string, Cirru>();
+interface Entry {
+  code?: Cirru;
+  schema?: Cirru;
+}
+
+/** Map of `ns/def` (and `ns/:ns` for the ns form) to its code and schema trees. */
+export function snapshotCodes(text: string): Map<string, Entry> {
+  const out = new Map<string, Entry>();
   const [root] = pare(text);
   const files = field(root, ":files");
   if (!isList(files) || !isList(files[1])) return out;
@@ -32,22 +37,23 @@ export function snapshotCodes(text: string): Map<string, Cirru> {
     const ns = name(entry[0]);
     const file = entry[1];
     const nsCode = quoted(field(file, ":ns") ?? [], ":code");
-    if (nsCode !== undefined) out.set(`${ns}/:ns`, nsCode);
+    if (nsCode !== undefined) out.set(`${ns}/:ns`, { code: nsCode });
     const defs = field(file, ":defs");
     if (!isList(defs) || !isList(defs[1])) continue;
     for (const d of defs[1].slice(1)) {
       if (!isList(d) || d.length < 2) continue;
-      const code = quoted(d[1], ":code");
-      if (code !== undefined) out.set(`${ns}/${name(d[0])}`, code);
+      out.set(`${ns}/${name(d[0])}`, { code: quoted(d[1], ":code"), schema: quoted(d[1], ":schema") });
     }
   }
   return out;
 }
 
-/** Definitions whose code differs between two snapshots, with both trees. */
+const same = (x?: Cirru, y?: Cirru) => JSON.stringify(x) === JSON.stringify(y);
+
+/** Definitions whose code or schema differs between two snapshots, with both trees. */
 export function changedCodes(before: string, after: string): DefCode[] {
-  let a: Map<string, Cirru>;
-  let b: Map<string, Cirru>;
+  let a: Map<string, Entry>;
+  let b: Map<string, Entry>;
   try {
     a = snapshotCodes(before);
     b = snapshotCodes(after);
@@ -58,8 +64,15 @@ export function changedCodes(before: string, after: string): DefCode[] {
   for (const key of new Set([...a.keys(), ...b.keys()])) {
     const x = a.get(key);
     const y = b.get(key);
-    if (x !== undefined && y !== undefined && JSON.stringify(x) === JSON.stringify(y)) continue;
-    out.push({ key, old: x, new: y });
+    const codeSame = same(x?.code, y?.code);
+    const schemaSame = same(x?.schema, y?.schema);
+    if (x && y && codeSame && schemaSame) continue;
+    out.push({
+      key,
+      old: x?.code,
+      new: y?.code,
+      ...(schemaSame ? {} : { oldSchema: x?.schema, newSchema: y?.schema }),
+    });
   }
   return out;
 }

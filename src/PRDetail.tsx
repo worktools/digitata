@@ -22,6 +22,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
     if (pr) prefetchProgramDiffs(repo, pr);
   }, [pr?.headRefOid, pr?.baseRefOid]);
   const viewer = useViewer();
+  const ctx = useMemo(() => (pr ? { repo, num, baseSha: pr.baseRefOid, headSha: pr.headRefOid } : null), [repo, num, pr?.baseRefOid, pr?.headRefOid]);
   // Until the full detail arrives, the row seen in the list gives an instant header.
   const head: PRSummary | undefined = pr ?? summaryOf(repo, num);
   const patch = useMemo(() => (diff.data !== undefined ? parsePatch(diff.data) : null), [diff.data]);
@@ -132,7 +133,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
                 <FileDiff
                   key={`${pr.headRefOid}:${f.path}`}
                   file={f}
-                  ctx={{ repo, num, baseSha: pr.baseRefOid, headSha: pr.headRefOid }}
+                  ctx={ctx!}
                   defaultOpen={!isNoise(f.path) && (!!rendererFor(f) || totalLines < 3000 || f.additions + f.deletions < 400)}
                 />
               ))}

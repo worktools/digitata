@@ -258,6 +258,14 @@ function Blocks({ lines, schemaOf, codes }: { lines: TreeLine[]; schemaOf: (d: s
                   const partNode = l.marker !== undefined && l.depth === root.depth! + 1;
                   if (partNode) skipping = false;
                   if (skipping || l.marker === "=") return null;
+                  if (partNode && code && l.change?.key === "schema" && (code.oldSchema !== undefined || code.newSchema !== undefined)) {
+                    return (
+                      <div key={l.id} data-line={l.id} className="pl part tree-part">
+                        <span className="part-label">类型</span>
+                        <CirruTree old={code.oldSchema} now={code.newSchema} foldAt={Infinity} />
+                      </div>
+                    );
+                  }
                   if (partNode && code && l.text.split(" ")[0] === "code") {
                     skipping = true;
                     return (

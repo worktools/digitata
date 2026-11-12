@@ -70,11 +70,15 @@ function Plain({ node, mode, head, foldAt }: { node: Cirru; mode: Mode; head?: b
   );
 }
 
-function Node({ d, mode, head }: { d: DNode; mode: Mode; head?: boolean }): ReactNode {
+function Node({ d, mode, head, foldAt }: { d: DNode; mode: Mode; head?: boolean; foldAt: number }): ReactNode {
   switch (d.t) {
     case "same":
-      // Unchanged branches fold unless they are tiny.
-      return <Plain node={d.node} mode={mode} head={head} foldAt={6} />;
+      // Unchanged branches are muted and fold unless they are tiny.
+      return (
+        <span className="dim">
+          <Plain node={d.node} mode={mode} head={head} foldAt={foldAt} />
+        </span>
+      );
     case "leaf":
       return (
         <span className="leaf-chg">
@@ -106,7 +110,7 @@ function Node({ d, mode, head }: { d: DNode; mode: Mode; head?: boolean }): Reac
       return (
         <span className={`ex chg ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`}>
           {d.items.map((c, i) => (
-            <Node key={i} d={c} mode={c.t === "list" && modes[i] !== "inline" ? "block" : modes[i]} head={i === 0} />
+            <Node key={i} d={c} mode={c.t === "list" && modes[i] !== "inline" && size(shapeOf(c)) > 10 ? "block" : modes[i]} head={i === 0} foldAt={foldAt} />
           ))}
         </span>
       );
@@ -115,11 +119,11 @@ function Node({ d, mode, head }: { d: DNode; mode: Mode; head?: boolean }): Reac
 }
 
 /** Code diff of one definition as a tree. */
-export const CirruTree = memo(function CirruTree({ old, now }: { old?: Cirru; now?: Cirru }) {
+export const CirruTree = memo(function CirruTree({ old, now, foldAt = 6 }: { old?: Cirru; now?: Cirru; foldAt?: number }) {
   const d = useMemo(() => diffCirru(old, now), [old, now]);
   return (
     <div className="cirru-tree">
-      <Node d={d} mode="inline" head />
+      <Node d={d} mode="inline" head foldAt={foldAt} />
     </div>
   );
 });

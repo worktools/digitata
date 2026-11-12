@@ -104,4 +104,7 @@ export interface DefCode {
   key: string;
   old?: Cirru;
   new?: Cirru;
+  /** Schema trees, present only when the schema changed. */
+  oldSchema?: Cirru;
+  newSchema?: Cirru;
 }

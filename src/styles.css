@@ -398,3 +398,13 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .cirru-tree .leaf-chg .old { color: var(--rem-fg); background: var(--rem-bg); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--rem-fg) 50%, transparent); }
 .cirru-tree .leaf-chg .new { color: var(--ins-fg); background: var(--ins-bg); font-weight: 600; }
 .cirru-tree .leaf-chg .arrow { color: var(--muted); padding: 0 2px; font-size: 11px; }
+
+/* Unchanged code: low contrast, no syntax colours, so changes carry the contrast. */
+.cirru-tree .dim { display: contents; }
+.cirru-tree .dim .lf, .cirru-tree .dim .lf-head, .cirru-tree .dim .lf-str, .cirru-tree .dim .lf-tag, .cirru-tree .dim .lf-num { color: color-mix(in srgb, var(--muted) 85%, var(--bg)); font-weight: 400; }
+.cirru-tree .dim .ex-ib { border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.cirru-tree .dim .ex-block { border-left-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.cirru-tree .fold { background: color-mix(in srgb, var(--bg3) 60%, transparent); }
+.cirru-tree .fold .lf { color: inherit; }
+/* File sections far from the viewport skip layout and paint. */
+.file { content-visibility: auto; contain-intrinsic-size: auto 400px; }
