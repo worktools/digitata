@@ -266,7 +266,7 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .tag.merge-failed { color: var(--del-fg); border-color: var(--del-fg); }
 
 /* A merged row flashes green, then fades and collapses (LEAVE_MS in PRList). */
-.pr-list li.leaving { overflow: hidden; pointer-events: none; animation: pr-leave 1.4s ease-in forwards; }
+.pr-list li.leaving { overflow: hidden; pointer-events: none; animation: pr-leave 0.3s ease-in forwards; }
 @keyframes pr-leave {
   0% { background: var(--add-bg); max-height: 120px; opacity: 1; }
   45% { background: var(--add-bg); max-height: 120px; opacity: 1; transform: translateX(0); }

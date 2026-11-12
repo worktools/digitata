@@ -151,7 +151,7 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
   );
 }
 
-const LEAVE_MS = 1400;
+const LEAVE_MS = 300;
 
 /**
  * PRs waiting for the viewer to merge, across all repos: open, non-draft PRs the
