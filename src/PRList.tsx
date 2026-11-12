@@ -15,6 +15,24 @@ function useReload(reloadKey: number, refresh: () => void) {
   }, [reloadKey]);
 }
 
+/** `n` opens the first PR of the list (ignored while typing or with a dialog open). */
+function useFirstShortcut(first: (() => void) | null) {
+  const ref = useRef(first);
+  ref.current = first;
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== "n" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || document.querySelector(".modal")) return;
+      if (!ref.current) return;
+      e.preventDefault();
+      ref.current();
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
+}
+
 /** Hovering a row warms the detail and diff caches so opening it is instant. */
 function hoverPrefetch(repo: string, num: number) {
   const a = Q.pr(repo, num);
@@ -85,6 +103,7 @@ export function PRList({ repo, selected, onSelect, reloadKey }: { repo: string; 
   const { data: prs, stale, error: err, refresh } = useCached(src.key, src.fetch, src.opts);
   useReload(reloadKey, refresh);
   useEffect(() => prs && rememberSummaries(repo, prs), [prs]);
+  useFirstShortcut(prs && prs.length ? () => onSelect(prs[0].number) : null);
 
   return (
     <div className="pr-list">
@@ -182,6 +201,9 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
     })
     .sort((a, b) => (a.createdAt ?? a.updatedAt).localeCompare(b.createdAt ?? b.updatedAt));
 
+  const firstLive = shown?.find((p) => merges[mergeKey(p.repo!, p.number)]?.state !== "done");
+  useFirstShortcut(firstLive ? () => onSelect(firstLive.repo!, firstLive.number) : null);
+
   return (
     <div className="pr-list">
       <div className="filters">
@@ -204,6 +226,9 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
           <button className="link" onClick={refresh}>
             刷新
           </button>
+          <span className="kbd-hint" title="按 N 打开列表第一个 PR">
+            <kbd>N</kbd>
+          </span>
         </div>
       )}
       <ul className={stale ? "stale" : ""}>

@@ -414,3 +414,4 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .cirru-tree .fold .lf { color: inherit; }
 /* File sections far from the viewport skip layout and paint. */
 .file { content-visibility: auto; contain-intrinsic-size: auto 400px; }
+.pr-list .count .kbd-hint { margin-left: 8px; }
