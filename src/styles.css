@@ -14,8 +14,8 @@
   --mod-bg: #fff8c5;
   --hunk-bg: #f0f2f5;
   /* Diff palette, separate from CI/status green-red: removed = cool blue, added = warm orange, modified = violet. */
-  --rem-fg: #0550ae;
-  --rem-bg: #ddf4ff;
+  --rem-fg: #0a3069;
+  --rem-bg: #e4eaf2;
   --ins-fg: #bc4c00;
   --ins-bg: #fff1e5;
   --chg-fg: #8250df;
@@ -39,8 +39,8 @@
     --mod-fg: #d29922;
     --mod-bg: #2b2111;
     --hunk-bg: #1b2028;
-    --rem-fg: #79c0ff;
-    --rem-bg: #0c2236;
+    --rem-fg: #4f84c4;
+    --rem-bg: #0a1626;
     --ins-fg: #f0883e;
     --ins-bg: #2d1b0e;
     --chg-fg: #bc8cff;
