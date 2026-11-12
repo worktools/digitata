@@ -33,7 +33,9 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
   };
 
   // If this PR's background merge finishes while it is open, reload its state.
-  useEffect(() => onMergeDone((k) => k === mergeKey(repo, num) && refreshAll()), [repo, num]);
+  // Only the PR's state changes on merge; its diff does not, so skip refetching it
+  // (re-diffing would re-render the whole file list for nothing).
+  useEffect(() => onMergeDone((k) => k === mergeKey(repo, num) && detail.refresh()), [repo, num]);
 
   if (!head) {
     if (detail.error) return <div className="error">{detail.error}</div>;
@@ -47,7 +49,6 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
           {head.title} <span className="muted">#{head.number}</span>
         </h2>
         <div className="pr-sub">
-          {head.state !== "OPEN" && <span className={`tag st-${head.state}`}>{head.state}</span>}
           <span className="repo-chip">{repo}</span>
           <span className="branch">
             <code>{head.headRefName}</code> → <code>{head.baseRefName}</code>
