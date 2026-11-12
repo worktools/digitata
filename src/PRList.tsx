@@ -200,7 +200,7 @@ export function InboxList({ selected, onSelect, reloadKey }: { selected?: string
       {shown && (
         <div className="count muted">
           {shown.length} 个待合并 · 最早在上 ·{" "}
-          <span className="add">{shown.filter((p) => prStatus(p).kind === "ready").length} 可合并</span>
+          <span className="ok-count">{shown.filter((p) => prStatus(p).kind === "ready").length} 可合并</span>
           <button className="link" onClick={refresh}>
             刷新
           </button>

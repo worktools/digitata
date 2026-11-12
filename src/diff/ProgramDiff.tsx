@@ -210,8 +210,8 @@ function Blocks({ lines, schemaOf }: { lines: TreeLine[]; schemaOf: (d: string) 
                 </span>
               )}
               {dir && <span className={`pill type-${dir}`}>类型 {dir}</span>}
-              {root.marker === "+" && <span className="pill ready">新增</span>}
-              {root.marker === "-" && <span className="pill failed">删除</span>}
+              {root.marker === "+" && <span className="pill ins">新增</span>}
+              {root.marker === "-" && <span className="pill rem">删除</span>}
             </header>
             <pre className="pd-tree">
               {body
