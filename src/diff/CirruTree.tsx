@@ -123,12 +123,27 @@ function Node({ d, mode, head, foldAt }: { d: DNode; mode: Mode; head?: boolean;
           </span>
         </span>
       );
+    case "wrap": {
+      // Nesting change: draw the new (or removed) wrapper as a dashed frame;
+      // the wrapped code inside stays as-is (or with its few edits).
+      const modes = childModes(d.items.map(shapeOf));
+      return (
+        <span
+          className={`ex wrap wrap-${d.dir} ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`}
+          onMouseEnter={tip(() => (d.dir === "in" ? "新增一层包裹，里面的代码基本未变" : "去掉了一层包裹，里面的代码基本未变"))}
+        >
+          {d.items.map((c, i) => (
+            <Node key={i} d={c} mode={(c.t === "list" || c.t === "wrap") && modes[i] !== "inline" && size(shapeOf(c)) > 10 ? "block" : modes[i]} head={i === 0} foldAt={foldAt} />
+          ))}
+        </span>
+      );
+    }
     case "list": {
       const modes = childModes(d.items.map(shapeOf));
       return (
         <span className={`ex chg ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`} onMouseEnter={tip(() => `内部有改动：${preview(shapeOf(d))}`)}>
           {d.items.map((c, i) => (
-            <Node key={i} d={c} mode={c.t === "list" && modes[i] !== "inline" && size(shapeOf(c)) > 10 ? "block" : modes[i]} head={i === 0} foldAt={foldAt} />
+            <Node key={i} d={c} mode={(c.t === "list" || c.t === "wrap") && modes[i] !== "inline" && size(shapeOf(c)) > 10 ? "block" : modes[i]} head={i === 0} foldAt={foldAt} />
           ))}
         </span>
       );

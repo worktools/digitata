@@ -428,3 +428,10 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .def-outline .do-def-name { overflow: hidden; text-overflow: ellipsis; }
 .def-outline .mk-glyph { font-weight: 700; width: 10px; text-align: center; flex-shrink: 0; }
 .file-index { max-width: 300px; }
+
+/* Nesting change: the added / removed wrapper is a dashed frame; wrapped code inside stays muted. */
+.cirru-tree .wrap { border-radius: 6px; outline: 1.5px dashed; outline-offset: 1px; }
+.cirru-tree .wrap-in { outline-color: color-mix(in srgb, var(--ins-fg) 75%, transparent); }
+.cirru-tree .wrap-out { outline-color: color-mix(in srgb, var(--rem-fg) 75%, transparent); }
+.cirru-tree .wrap.ex-block { padding: 2px 6px 2px 10px; margin-top: 3px; margin-bottom: 3px; }
+.cirru-tree .wrap.ex-inline { padding: 0 2px; }

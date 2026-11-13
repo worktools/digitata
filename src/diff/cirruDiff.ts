@@ -13,7 +13,9 @@ export type DNode =
   | { t: "list"; items: DNode[] }
   | { t: "add"; node: Cirru }
   | { t: "del"; node: Cirru }
-  | { t: "replace"; old: Cirru; new: Cirru };
+  | { t: "replace"; old: Cirru; new: Cirru }
+  /** Nesting change: `in` = new wrapper around (nearly) unchanged old code, `out` = old wrapper removed. */
+  | { t: "wrap"; dir: "in" | "out"; items: DNode[] };
 
 const keys = new WeakMap<Cirru[], string>();
 /** Structural identity key, cached per list. */
@@ -68,14 +70,86 @@ function alike(x: Cirru, y: Cirru, gapSizesEqual: boolean): boolean {
   return Math.min(sx, sy) / Math.max(sx, sy) > 0.6;
 }
 
+// ---- nesting changes ----------------------------------------------------
+
+const WRAP_DEPTH = 3;
+
+/** Path (child indexes) to a descendant of `outer` matching `pred`, breadth-first, up to WRAP_DEPTH levels. */
+function findPath(outer: Cirru, pred: (x: Cirru) => boolean): number[] | null {
+  let level: { node: Cirru; path: number[] }[] = [{ node: outer, path: [] }];
+  for (let depth = 0; depth < WRAP_DEPTH; depth++) {
+    const next: typeof level = [];
+    for (const { node, path } of level) {
+      if (typeof node === "string") continue;
+      for (let i = 0; i < node.length; i++) {
+        const p = [...path, i];
+        if (pred(node[i])) return p;
+        next.push({ node: node[i], path: p });
+      }
+    }
+    level = next;
+  }
+  return null;
+}
+
+/**
+ * Detect that `inner` now sits inside `outer` (or the reverse): exactly, or
+ * nearly (a same-headed list that keeps most nodes). Returns the wrapper with
+ * every other child marked added (`in`) or removed (`out`).
+ */
+function nesting(a: Cirru, b: Cirru): DNode | null {
+  const tryDir = (inner: Cirru, outer: Cirru, dir: "in" | "out"): DNode | null => {
+    if (typeof outer === "string") return null;
+    // A lone leaf is common everywhere; only accept it as a direct child of a small form.
+    if (typeof inner === "string") {
+      if (outer.length > 4) return null;
+      const i = outer.findIndex((c) => c === inner);
+      return i < 0 ? null : build(outer, [i], { t: "same", node: inner }, dir);
+    }
+    const k = keyOf(inner);
+    if (keyOf(outer).includes(k)) {
+      const p = findPath(outer, (x) => keyOf(x) === k);
+      if (p) return build(outer, p, { t: "same", node: inner }, dir);
+    }
+    // Near match: a same-headed list below that keeps most of `inner`.
+    const si = size(inner);
+    if (si < 6) return null;
+    const head = keyOf(inner[0] ?? "");
+    let found: DNode | null = null;
+    const p = findPath(outer, (x) => {
+      if (typeof x === "string" || keyOf(x[0] ?? "") !== head) return false;
+      const sx = size(x);
+      if (Math.min(sx, si) / Math.max(sx, si) < 0.6) return false;
+      const d = dir === "in" ? diffCirru(inner, x) : diffCirru(x, inner);
+      if (d.t === "replace" || kept(d) / Math.max(sx, si) < 0.6) return false;
+      found = d;
+      return true;
+    });
+    return p && found ? build(outer, p, found, dir) : null;
+  };
+  return tryDir(a, b, "in") ?? tryDir(b, a, "out");
+}
+
+function build(node: Cirru, path: number[], innerDiff: DNode, dir: "in" | "out"): DNode {
+  if (path.length === 0 || typeof node === "string") return innerDiff;
+  const [i, ...rest] = path;
+  const items = node.map((c, j): DNode => (j === i ? build(c, rest, innerDiff, dir) : dir === "in" ? { t: "add", node: c } : { t: "del", node: c }));
+  return { t: "wrap", dir, items };
+}
+
 export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
   if (a === undefined && b !== undefined) return { t: "add", node: b };
   if (b === undefined && a !== undefined) return { t: "del", node: a };
   if (a === undefined || b === undefined) return { t: "same", node: [] };
   if (keyOf(a) === keyOf(b)) return { t: "same", node: b };
   if (typeof a === "string" && typeof b === "string") return { t: "leaf", old: a, new: b };
-  if (typeof a === "string" || typeof b === "string") return { t: "replace", old: a, new: b };
+  if (typeof a === "string" || typeof b === "string") return nesting(a, b) ?? { t: "replace", old: a, new: b };
 
+  // Pure nesting change: one side contains the other unchanged.
+  if (keyOf(b).includes(keyOf(a)) || keyOf(a).includes(keyOf(b))) {
+    const n = nesting(a, b);
+    if (n) return n;
+  }
   const ka = a.map(keyOf);
   const kb = b.map(keyOf);
   const anchors = a.length * b.length > 250_000 ? [] : lcs(ka, kb);
@@ -87,8 +161,14 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
     const news = b.slice(pj, j1);
     const equal = olds.length === news.length;
     let k = 0;
-    while (k < olds.length && k < news.length && alike(olds[k], news[k], equal)) {
-      items.push(diffCirru(olds[k], news[k]));
+    while (k < olds.length && k < news.length) {
+      if (alike(olds[k], news[k], equal)) items.push(diffCirru(olds[k], news[k]));
+      else {
+        // e.g. `x` → `(f x)`: a wrap, not a delete plus an add.
+        const n = nesting(olds[k], news[k]);
+        if (!n) break;
+        items.push(n);
+      }
       k++;
     }
     for (const x of olds.slice(k)) items.push({ t: "del", node: x });
@@ -102,13 +182,13 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
   }
   gap(a.length, b.length);
   // Nothing in common at all: show it as one replacement rather than noise.
-  if (anchors.length === 0 && items.every((x) => x.t === "add" || x.t === "del")) return { t: "replace", old: a, new: b };
+  if (anchors.length === 0 && items.every((x) => x.t === "add" || x.t === "del")) return nesting(a, b) ?? { t: "replace", old: a, new: b };
   // Almost everything changed (little survives on either side): one whole
   // replacement reads better than many scattered edits.
   const list: DNode = { t: "list", items };
   const total = Math.max(size(a), size(b));
   // Tiny forms like `(f a)` keep their in-place leaf edits.
-  if (total >= 5 && kept(list) / total < REPLACE_BELOW) return { t: "replace", old: a, new: b };
+  if (total >= 5 && kept(list) / total < REPLACE_BELOW) return nesting(a, b) ?? { t: "replace", old: a, new: b };
   return list;
 }
 
@@ -122,6 +202,8 @@ function kept(d: DNode): number {
       return size(d.node);
     case "list":
       return d.items.reduce((n, c) => n + kept(c), d.items[0]?.t === "same" ? 1 : 0);
+    case "wrap":
+      return d.items.reduce((n, c) => n + kept(c), 0);
     default:
       return 0;
   }
@@ -148,6 +230,7 @@ function shapeOfRaw(d: DNode): Cirru {
     case "replace":
       return d.new;
     case "list":
+    case "wrap":
       return d.items.map(shapeOf);
   }
 }
