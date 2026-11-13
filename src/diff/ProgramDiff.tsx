@@ -234,9 +234,10 @@ const Blocks = memo(function Blocks({ lines, schemaOf, codes }: { lines: TreeLin
               {(() => {
                 // Code parts of this definition render as a structural tree; the
                 // CLI's printed lines for that part are skipped.
-                const codeKey = p.length === 4 ? `${ns}/${p[3]}` : p[2] === "ns" ? `${ns}/:ns` : "";
+                const codeKey = p[0] !== "files" ? `:config/${p[0]}` : p.length === 4 ? `${ns}/${p[3]}` : p[2] === "ns" ? `${ns}/:ns` : "";
                 const code = codes.get(codeKey);
-                if (code && p[2] === "ns") {
+                // ns declarations and top-level config are one tree each.
+                if (code && (p[2] === "ns" || p[0] !== "files")) {
                   return <CirruTree old={code.old} now={code.new} />;
                 }
                 let skipping = false;

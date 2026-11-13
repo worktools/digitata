@@ -52,13 +52,23 @@ function testsOf(entry: Cirru | undefined): Cirru | undefined {
 export function snapshotCodes(text: string): Map<string, Entry> {
   const out = new Map<string, Entry>();
   const [root] = pare(text);
+  // Top-level snapshot fields other than files (entries, configs, …) as `:config/<name>`.
+  if (isList(root)) {
+    for (const f of root.slice(1)) {
+      const k = head(f);
+      if (!k || k === ":files" || k === ":about" || !isList(f)) continue;
+      out.set(`:config/${k.slice(1)}`, { code: f.length === 2 ? f[1] : f.slice(1) });
+    }
+  }
   const files = field(root, ":files");
   if (!isList(files) || !isList(files[1])) return out;
   for (const entry of files[1].slice(1)) {
     if (!isList(entry) || entry.length < 2) continue;
     const ns = name(entry[0]);
     const file = entry[1];
-    const nsCode = quoted(field(file, ":ns") ?? [], ":code");
+    // `:ns $ %{} 'NsEntry (:doc |) (:code $ quote $ ns …)`, or the older `:ns $ quote $ ns …`.
+    const nsVal = (field(file, ":ns") as Cirru[] | undefined)?.[1];
+    const nsCode = isList(nsVal) && nsVal[0] === "quote" ? nsVal[1] : quoted(nsVal, ":code");
     if (nsCode !== undefined) out.set(`${ns}/:ns`, { code: nsCode });
     const defs = field(file, ":defs");
     if (!isList(defs) || !isList(defs[1])) continue;
