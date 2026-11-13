@@ -103,7 +103,28 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
   gap(a.length, b.length);
   // Nothing in common at all: show it as one replacement rather than noise.
   if (anchors.length === 0 && items.every((x) => x.t === "add" || x.t === "del")) return { t: "replace", old: a, new: b };
-  return { t: "list", items };
+  // Almost everything changed (little survives on either side): one whole
+  // replacement reads better than many scattered edits.
+  const list: DNode = { t: "list", items };
+  const total = Math.max(size(a), size(b));
+  // Tiny forms like `(f a)` keep their in-place leaf edits.
+  if (total >= 5 && kept(list) / total < REPLACE_BELOW) return { t: "replace", old: a, new: b };
+  return list;
+}
+
+/** Below this share of unchanged nodes, a changed list is shown as a whole replacement. */
+const REPLACE_BELOW = 0.4;
+
+/** Number of nodes that stay unchanged inside a diff node (the list container itself counts when its head survives). */
+function kept(d: DNode): number {
+  switch (d.t) {
+    case "same":
+      return size(d.node);
+    case "list":
+      return d.items.reduce((n, c) => n + kept(c), d.items[0]?.t === "same" ? 1 : 0);
+    default:
+      return 0;
+  }
 }
 
 /** The new-side shape of a diff node (old side for deletions), used for layout. */
