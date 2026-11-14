@@ -66,13 +66,15 @@ export function parseTree(raw: string[]): { lines: TreeLine[]; defs: DefChange[]
     const prefix = PREFIX_RE.exec(line)![0];
     const rest = line.slice(prefix.length);
     const col = [...prefix].length;
-    const node = /(├── |└── )$/u.test(prefix) || (prefix === "" && rest !== "" && id <= 1);
-    const nm = /^([=~+-]) (.*)$/.exec(rest);
+    const branch = /[├└]── +$/u.exec(prefix);
+    const node = branch !== null || (prefix === "" && rest !== "" && id <= 1);
+    // The CLI pads added and removed markers, even in plain output.
+    const nm = /^([=~+-]) +(.+)$/.exec(rest);
 
     if (block && (col <= block.col || node)) block = null;
 
     if (node && nm) {
-      const depth = Math.round((col - 4) / 4) + 1;
+      const depth = branch ? branch.index / 4 + 1 : 0;
       const name = nm[2].split(" ")[0];
       stack.length = depth;
       stack[depth] = name;
@@ -80,7 +82,7 @@ export function parseTree(raw: string[]): { lines: TreeLine[]; defs: DefChange[]
       const path = stack.slice(1);
       const cm = marker === "~" ? /^(\S+) "(.*)" -> "(.*)"$/.exec(nm[2]) : null;
       const change = cm ? { key: cm[1], ...inlineDiff(cm[2], cm[3]) } : undefined;
-      lines.push({ id, prefix, text: nm[2], marker, depth, path, change });
+      lines.push({ id, prefix: branch ? prefix.slice(0, branch.index + 4) : prefix, text: nm[2], marker, depth, path, change });
       // files/<ns>/defs/<def>
       if (path[0] === "files" && path.length === 4 && path[2] === "defs" && marker !== "=") {
         defs.push({ ns: path[1], def: path[3], marker, lineId: id, parts: [] });
