@@ -20,10 +20,10 @@ export type DNode =
 const keys = new WeakMap<Cirru[], string>();
 /** Structural identity key, cached per list. */
 export function keyOf(x: Cirru): string {
-  if (typeof x === "string") return x;
+  if (typeof x === "string") return JSON.stringify(x);
   let k = keys.get(x);
   if (k === undefined) {
-    k = `(${x.map(keyOf).join(" ")})`;
+    k = `[${x.map(keyOf).join(",")}]`;
     keys.set(x, k);
   }
   return k;
@@ -152,7 +152,23 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
   }
   const ka = a.map(keyOf);
   const kb = b.map(keyOf);
-  const anchors = a.length * b.length > 250_000 ? [] : lcs(ka, kb);
+  // Anchor identical edges before LCS, including when the middle is too large.
+  let prefix = 0;
+  while (prefix < ka.length && prefix < kb.length && ka[prefix] === kb[prefix]) prefix++;
+  let oldEnd = ka.length;
+  let newEnd = kb.length;
+  while (oldEnd > prefix && newEnd > prefix && ka[oldEnd - 1] === kb[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+  const anchors: [number, number][] = [];
+  for (let i = 0; i < prefix; i++) anchors.push([i, i]);
+  if ((oldEnd - prefix) * (newEnd - prefix) <= 250_000) {
+    for (const [i, j] of lcs(ka.slice(prefix, oldEnd), kb.slice(prefix, newEnd))) {
+      anchors.push([prefix + i, prefix + j]);
+    }
+  }
+  for (let i = oldEnd, j = newEnd; i < ka.length; i++, j++) anchors.push([i, j]);
   const items: DNode[] = [];
   let pi = 0;
   let pj = 0;
@@ -187,8 +203,11 @@ export function diffCirru(a: Cirru | undefined, b: Cirru | undefined): DNode {
   // replacement reads better than many scattered edits.
   const list: DNode = { t: "list", items };
   const total = Math.max(size(a), size(b));
-  // Tiny forms like `(f a)` keep their in-place leaf edits.
-  if (total >= 5 && kept(list) / total < REPLACE_BELOW) return nesting(a, b) ?? { t: "replace", old: a, new: b };
+  // Keep aligned boundary children visible even after a large interior rewrite.
+  const sharedEdge = prefix > 0 || oldEnd < ka.length;
+  if (!sharedEdge && total >= 5 && kept(list) / total < REPLACE_BELOW) {
+    return nesting(a, b) ?? { t: "replace", old: a, new: b };
+  }
   return list;
 }
 
