@@ -381,7 +381,7 @@ kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border)
 .cirru-tree .ex.chg.ex-block { border-left-color: color-mix(in srgb, var(--chg-fg) 55%, transparent); }
 .cirru-tree .ex.chg.ex-ib { border-bottom-color: color-mix(in srgb, var(--chg-fg) 55%, transparent); }
 .cirru-tree .ex-void { display: inline-block; width: 14px; height: 10px; border-bottom: 1px solid var(--border); border-radius: 6px; margin-right: 6px; }
-.cirru-tree .fold { color: var(--muted); cursor: pointer; background: var(--bg3); border-radius: 5px; padding: 0 6px; border: none; margin-right: 6px; }
+.cirru-tree .fold { color: var(--muted); cursor: pointer; background: var(--bg3); border-radius: 5px; padding: 0 6px; margin-right: 6px; }
 .cirru-tree .fold.ex-block { display: table; margin-left: 12px; }
 .cirru-tree .fold .lf { margin-right: 4px; font-weight: 400; }
 .cirru-tree .fold:hover { color: var(--fg); }

@@ -18,9 +18,9 @@ function childModes(items: Cirru[]): Mode[] {
   const many = (x: Cirru, n: number) => Array.isArray(x) && (x.length > n || x.some((y) => Array.isArray(y)));
   const modes: Mode[] = [];
   let prev: Mode = "inline";
-  items.forEach((c, i) => {
+  items.forEach((c) => {
     let m: Mode;
-    if (i === 0 || typeof c === "string") m = "inline";
+    if (typeof c === "string") m = "inline";
     else if (many(c, 6)) m = "block";
     else if (prev === "inline") m = "inline-block";
     else if (prev === "inline-block") m = many(c, 2) ? "block" : "inline-block";
@@ -69,7 +69,7 @@ function Plain({ node, mode, head, foldAt, rootOpen }: { node: Cirru; mode: Mode
   if (n > foldAt && !open) {
     const h = typeof node[0] === "string" ? node[0] : "(…)";
     return (
-      <span className={`ex fold ${mode === "block" ? "ex-block" : "ex-inline"}`} onClick={() => setOpen(true)} onMouseEnter={tip(() => `未改动：${preview(node)}（${n} 个节点，点击展开）`)}>
+      <span className={`ex fold ${mode === "block" ? "ex-block" : mode === "inline-block" ? "ex-ib" : "ex-inline"}`} onClick={() => setOpen(true)} onMouseEnter={tip(() => `未改动：${preview(node)}（${n} 个节点，点击展开）`)}>
         <span className="lf lf-head">{h}</span>
         <span className="fold-dots">⋯ {n}</span>
       </span>
@@ -112,17 +112,19 @@ function Node({ d, mode, head, foldAt }: { d: DNode; mode: Mode; head?: boolean;
           <Plain node={d.node} mode={mode === "block" ? "inline" : mode} head={head} foldAt={CARD_FOLD} rootOpen />
         </span>
       );
-    case "replace":
+    case "replace": {
+      const sideMode = mode === "block" ? "inline" : "inline-block";
       return (
         <span className={`replace ${mode === "block" ? "card-block" : ""}`} onMouseEnter={tip(() => `替换：${preview(d.old)} → ${preview(d.new)}`)}>
           <span className="card card-rem">
-            <Plain node={d.old} mode="inline" head={head} foldAt={CARD_FOLD} rootOpen />
+            <Plain node={d.old} mode={sideMode} head={head} foldAt={CARD_FOLD} rootOpen />
           </span>
           <span className="card card-ins">
-            <Plain node={d.new} mode="inline" head={head} foldAt={CARD_FOLD} rootOpen />
+            <Plain node={d.new} mode={sideMode} head={head} foldAt={CARD_FOLD} rootOpen />
           </span>
         </span>
       );
+    }
     case "wrap": {
       // Nesting change: draw the new (or removed) wrapper as a dashed frame;
       // the wrapped code inside stays as-is (or with its few edits).
