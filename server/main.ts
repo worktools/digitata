@@ -37,6 +37,8 @@ function serveStatic(pathname: string, res: ServerResponse) {
 
 // /api/repos/:owner/:repo/pulls[/:num[/diff|/merge|/program-diff]]
 const ROUTE = /^\/api\/repos\/([\w.-]+)\/([\w.-]+)\/pulls(?:\/(\d+)(?:\/(diff|merge|program-diff))?)?$/;
+// /api/repos/:owner/:repo/pulls/:num/threads/(resolve|reply)
+const THREAD_ROUTE = /^\/api\/repos\/([\w.-]+)\/([\w.-]+)\/pulls\/(\d+)\/threads\/(resolve|reply)$/;
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -50,6 +52,22 @@ const server = createServer(async (req, res) => {
       const filter = (url.searchParams.get("filter") ?? "all") as InboxFilter;
       if (!["all", "author", "review", "assignee", "mentioned"].includes(filter)) return send(res, 400, { error: "bad filter" });
       return send(res, 200, await host.inbox(filter, url.searchParams.get("q") ?? ""));
+    }
+    const tm = THREAD_ROUTE.exec(url.pathname);
+    if (tm) {
+      if (req.method !== "POST") return send(res, 405, { error: "method not allowed" });
+      if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return send(res, 415, { error: "json required" });
+      const repo = `${tm[1]}/${tm[2]}`;
+      const num = Number(tm[3]);
+      const action = tm[4];
+      const body = (await readBody(req)) as Record<string, unknown>;
+      if (typeof body.threadId !== "string" || body.threadId.length === 0) return send(res, 400, { error: "threadId required" });
+      if (action === "resolve") {
+        if (typeof body.resolved !== "boolean") return send(res, 400, { error: "resolved boolean required" });
+        return send(res, 200, await host.resolveThread(repo, num, body.threadId, body.resolved));
+      }
+      if (typeof body.body !== "string" || body.body.trim().length === 0) return send(res, 400, { error: "reply body required" });
+      return send(res, 200, { comment: await host.replyToThread(repo, num, body.threadId, body.body) });
     }
     const m = ROUTE.exec(url.pathname);
     if (!m) return send(res, 404, { error: "not found" });
@@ -82,6 +100,7 @@ const server = createServer(async (req, res) => {
     }
     return send(res, 405, { error: "method not allowed" });
   } catch (e) {
+    console.error(`[digitata] ${req.method} ${url.pathname}:`, e);
     send(res, 500, { error: e instanceof Error ? e.message : String(e) });
   }
 });

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "digitata": "bin/digitata"
+  },
   "description": "Local GitHub PR viewer and merger, backed by the gh CLI, with Calcit program diffs",
   "scripts": {
     "dev": "node scripts/dev.mjs",

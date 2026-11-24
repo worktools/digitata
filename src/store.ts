@@ -13,6 +13,8 @@ interface Entry {
 
 const mem = new Map<string, Entry>();
 const inflight = new Map<string, Promise<unknown>>();
+const cacheListeners = new Set<(key: string) => void>();
+const emitCache = (key: string) => cacheListeners.forEach((l) => l(key));
 const PERSIST_PREFIX = "digitata.cache:";
 const PERSIST_MAX = 400_000; // characters; big diffs stay in memory only
 
@@ -167,11 +169,32 @@ export function useCached<T>(key: string | null, fetcher: () => Promise<T>, opts
     };
   }, [key, tick]);
 
+  useEffect(() => {
+    if (!key) return;
+    const on = (k: string) => {
+      if (k === key) force((x) => x + 1);
+    };
+    cacheListeners.add(on);
+    return () => {
+      cacheListeners.delete(on);
+    };
+  }, [key]);
+
   const fresh = key ? peek<T>(key, opts.persist) : undefined;
   if (fresh !== undefined) lastShown.current = fresh;
   const data = fresh ?? (opts.keepPrevious ? lastShown.current : undefined);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   return { data, stale: fresh === undefined && data !== undefined, error, loading, refresh };
+}
+
+/** Update a cached entry in place and notify any active `useCached` subscriber. */
+export function updateCache<T>(key: string, fn: (prev: T) => T, persist = false) {
+  const prev = peek<T>(key, persist);
+  if (prev === undefined) return;
+  const e = { data: fn(prev), at: Date.now() };
+  mem.set(key, e);
+  if (persist) writePersisted(key, e);
+  emitCache(key);
 }
 
 // ---- summaries seen in lists, used as instant headers for detail views ----
@@ -182,6 +205,25 @@ export function rememberSummaries(repo: string | null, prs: PRSummary[]) {
 }
 export function summaryOf(repo: string, num: number) {
   return summaries.get(`${repo}#${num}`);
+}
+
+export function syncUnresolvedCount(repo: string, num: number, unresolvedCount: number) {
+  const summary = summaries.get(`${repo}#${num}`);
+  if (summary) summary.unresolvedThreads = unresolvedCount;
+  for (const [k, entry] of mem) {
+    if ((!k.startsWith("inbox3:") && !k.startsWith(`list:${repo}:`)) || !Array.isArray(entry.data)) continue;
+    let changed = false;
+    const next = (entry.data as PRSummary[]).map((p) => {
+      if ((p.repo ?? repo) !== repo || p.number !== num) return p;
+      changed = true;
+      return { ...p, unresolvedThreads: unresolvedCount };
+    });
+    if (!changed) continue;
+    const updated = { data: next, at: Date.now() };
+    mem.set(k, updated);
+    writePersisted(k, updated);
+    emitCache(k);
+  }
 }
 
 // ---- merge jobs: run in the background, independent of which PR is open ----
@@ -212,7 +254,7 @@ export function startMerge(repo: string, num: number, run: () => Promise<string>
       set({ state: "done", text: msg || "已合并", doneAt: Date.now() });
       toast(`✓ 已合并 ${key}`, "ok");
       // Detail and lists are stale now; drop the detail cache and tell listeners to refresh.
-      mem.delete(`pr:${key}`);
+      mem.delete(`pr2:${key}`);
       mergeDoneListeners.forEach((l) => l(key));
     })
     .catch((e: Error) => {

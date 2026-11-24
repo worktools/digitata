@@ -70,7 +70,7 @@ function DefOutline({ path, ctx }: { path: string; ctx: DiffContext }) {
 const GLYPH: Record<Marker, string> = { "~": "●", "+": "+", "-": "−", "=": "=" };
 const MK: Record<Marker, string> = { "~": "mod", "+": "add", "-": "del", "=": "same" };
 
-export function FileIndex({ files, ctx }: { files: FilePatch[]; ctx: DiffContext }) {
+export function FileIndex({ files, ctx, unresolvedByFile }: { files: FilePatch[]; ctx: DiffContext; unresolvedByFile?: Map<string, number> }) {
   const [active, setActive] = useState(files[0]?.path ?? "");
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("digitata.fi-collapsed") === "1");
   useEffect(() => localStorage.setItem("digitata.fi-collapsed", collapsed ? "1" : "0"), [collapsed]);
@@ -124,6 +124,7 @@ export function FileIndex({ files, ctx }: { files: FilePatch[]; ctx: DiffContext
         {files.map((f) => {
           const name = f.path.split("/").pop();
           const dir = f.path.slice(0, f.path.length - (name?.length ?? 0));
+          const cmts = unresolvedByFile?.get(f.path) ?? 0;
           return (
             <li key={f.path} className={`${f.path === active ? "on" : ""} ${isNoise(f.path) ? "noise" : ""}`} title={f.path}>
               <a
@@ -144,6 +145,11 @@ export function FileIndex({ files, ctx }: { files: FilePatch[]; ctx: DiffContext
                   ) : (
                     <span className="fi-prog" title="program diff">ƒ</span>
                   ))}
+                {cmts > 0 && (
+                  <span className="fi-cmts" title={`${cmts} 条未解决评论`}>
+                    💬{cmts}
+                  </span>
+                )}
                 <span className="stat">
                   <span className="add">+{f.additions}</span> <span className="del">−{f.deletions}</span>
                 </span>

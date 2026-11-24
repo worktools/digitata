@@ -6,7 +6,7 @@ import { ChecksBadge, prStatus } from "./PRList.tsx";
 
 const METHOD_LABEL: Record<MergeMethod, string> = { squash: "Squash and merge", merge: "Merge commit", rebase: "Rebase and merge" };
 
-export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
+export function MergePanel({ repo, pr, onOpenComments }: { repo: string; pr: PRDetail; onOpenComments?: () => void }) {
   const [method, setMethod] = useState<MergeMethod>(() => (localStorage.getItem("digitata.method") as MergeMethod) || "squash");
   const [deleteBranch, setDeleteBranch] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -50,6 +50,7 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
       </div>
     );
 
+  const unresolved = pr.unresolvedThreads ?? (pr.reviewThreads ?? []).filter((t) => !t.isResolved).length;
   const warnings: string[] = [];
   if (pr.isDraft) warnings.push("PR 仍是草稿");
   if (pr.checks.state === "failure") warnings.push(`${pr.checks.failure} 个检查失败`);
@@ -57,6 +58,7 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
   if (pr.mergeable === "CONFLICTING") warnings.push("存在合并冲突");
   if (pr.mergeStateStatus && !["CLEAN", "HAS_HOOKS", "UNSTABLE"].includes(pr.mergeStateStatus)) warnings.push(`合并状态：${pr.mergeStateStatus}`);
   if (pr.reviewDecision === "CHANGES_REQUESTED") warnings.push("有 reviewer 要求修改");
+  if (unresolved > 0) warnings.push(`还有 ${unresolved} 条未解决的 review 评论`);
   const needsAck = warnings.length > 0;
   const status = prStatus(pr);
 
@@ -116,6 +118,11 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
           <span className={`pill big ${status.kind}`}>{status.label}</span>
         )}
         {pr.reviewDecision === "APPROVED" && <span className="pill ready">✓ approved</span>}
+        {unresolved > 0 && (
+          <button type="button" className="pill pending big clickable-pill" onClick={onOpenComments} title="查看未解决的 review 评论">
+            💬 {unresolved} 未解决
+          </button>
+        )}
       </span>
       <div className="merge-actions">
         <select value={method} onChange={(e) => setMethod(e.target.value as MergeMethod)}>
@@ -161,6 +168,11 @@ export function MergePanel({ repo, pr }: { repo: string; pr: PRDetail }) {
               <li>
                 CI：<ChecksBadge checks={pr.checks} />
               </li>
+              {unresolved > 0 && (
+                <li>
+                  未解决评论：<span className="pill pending">{unresolved} 条</span>
+                </li>
+              )}
             </ul>
             {pr.checkList.filter((c) => c.state === "failure" || c.state === "pending").length > 0 && (
               <ul className="check-list compact">

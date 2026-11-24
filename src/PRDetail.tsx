@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PRSummary } from "../shared/types.ts";
 import { prefetchProgramDiffs, q as Q } from "./api.ts";
 import { mergeKey, onMergeDone, onResume, summaryOf, useCached } from "./store.ts";
 import { FileDiff, isNoise, rendererFor } from "./diff/FileDiff.tsx";
-import { parsePatch, type FilePatch } from "./diff/parse.ts";
+import { parsePatch } from "./diff/parse.ts";
 import { FileIndex } from "./FileIndex.tsx";
 import { MergePanel } from "./MergePanel.tsx";
 import { age, ChecksBadge, timeAgo, useViewer } from "./PRList.tsx";
+import { ReviewThreads } from "./ReviewThreads.tsx";
 
-type Tab = "files" | "overview" | "checks";
+type Tab = "files" | "comments" | "overview" | "checks";
 
 export function PRDetail({ repo, num }: { repo: string; num: number }) {
   const [tab, setTab] = useState<Tab>("files");
+  const [commentFileFilter, setCommentFileFilter] = useState<string | null>(null);
+  const [focusFile, setFocusFile] = useState<string | null>(null);
   const qp = Q.pr(repo, num);
   const qd = Q.diff(repo, num);
   const detail = useCached(qp.key, qp.fetch, qp.opts);
@@ -27,6 +30,30 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
   const head: PRSummary | undefined = pr ?? summaryOf(repo, num);
   const patch = useMemo(() => (diff.data !== undefined ? parsePatch(diff.data) : null), [diff.data]);
   const totalLines = useMemo(() => patch?.reduce((n, f) => n + f.additions + f.deletions, 0) ?? 0, [patch]);
+  const threads = pr?.reviewThreads ?? [];
+  const unresolvedCount = useMemo(() => threads.filter((t) => !t.isResolved).length, [threads]);
+  const unresolvedByFile = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of threads) {
+      if (!t.isResolved) map.set(t.path, (map.get(t.path) ?? 0) + 1);
+    }
+    return map;
+  }, [threads]);
+  const openAllComments = useCallback(() => {
+    setCommentFileFilter(null);
+    setTab("comments");
+  }, []);
+  const openFileComments = useCallback((path: string) => {
+    setCommentFileFilter(path);
+    setTab("comments");
+  }, []);
+  const jumpToFile = useCallback((path: string) => {
+    setFocusFile(path);
+    setTab("files");
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => document.getElementById(`file-${path}`)?.scrollIntoView({ block: "start" })),
+    );
+  }, []);
   const refreshAll = () => {
     detail.refresh();
     diff.refresh();
@@ -70,7 +97,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
       {/* Sticky bar: the merge controls stay reachable while scrolling the diff. */}
       <div className="merge-bar">
         {pr ? (
-          <MergePanel repo={repo} pr={pr} />
+          <MergePanel repo={repo} pr={pr} onOpenComments={openAllComments} />
         ) : (
           <div className="merge-panel muted">
             <span className="mb-title">
@@ -86,6 +113,14 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
         <button className={tab === "files" ? "on" : ""} onClick={() => setTab("files")}>
           文件 {pr.changedFiles}
         </button>
+        <button className={tab === "comments" ? "on" : ""} onClick={() => setTab("comments")}>
+          评论
+          {unresolvedCount > 0 ? (
+            <span className="pill pending">{unresolvedCount}</span>
+          ) : threads.length > 0 ? (
+            <span className="muted">{threads.length}</span>
+          ) : null}
+        </button>
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>
           概览 · {pr.commits.length} commits
         </button>
@@ -93,6 +128,15 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
           检查 <ChecksBadge checks={pr.checks} />
         </button>
       </nav>
+      {tab === "comments" && (
+        <ReviewThreads
+          repo={repo}
+          pr={pr}
+          fileFilter={commentFileFilter}
+          onClearFileFilter={() => setCommentFileFilter(null)}
+          onJumpToFile={jumpToFile}
+        />
+      )}
       {tab === "overview" && (
         <div className="overview">
           <pre className="body">{pr.body || "（无描述）"}</pre>
@@ -130,7 +174,7 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
           {!patch && (diff.error ? <div className="error">{diff.error}</div> : <div className="loading">加载 diff…</div>)}
           {patch && (
             <div className="files-layout">
-              <FileIndex files={patch} ctx={ctx!} />
+              <FileIndex files={patch} ctx={ctx!} unresolvedByFile={unresolvedByFile} />
               <div className="files-main">
               {patch.map((f) => (
                 <FileDiff
@@ -138,6 +182,9 @@ export function PRDetail({ repo, num }: { repo: string; num: number }) {
                   file={f}
                   ctx={ctx!}
                   defaultOpen={!isNoise(f.path) && (!!rendererFor(f) || totalLines < 3000 || f.additions + f.deletions < 400)}
+                  unresolvedCount={unresolvedByFile.get(f.path) ?? 0}
+                  forceOpen={focusFile === f.path}
+                  onOpenComments={openFileComments}
                 />
               ))}
               </div>

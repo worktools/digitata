@@ -1,6 +1,17 @@
 // CodeHost implemented on top of the `gh` CLI (uses the user's existing gh login).
 
-import type { Check, CheckState, ChecksSummary, InboxFilter, MergeRequest, PRDetail, PRSummary } from "../shared/types.ts";
+import type {
+  Check,
+  CheckState,
+  ChecksSummary,
+  InboxFilter,
+  MergeRequest,
+  PRDetail,
+  PRSummary,
+  ResolveThreadResult,
+  ReviewComment,
+  ReviewThread,
+} from "../shared/types.ts";
 import type { CodeHost, ListOptions } from "./host.ts";
 import { tmpdir } from "node:os";
 import { runOk } from "./run.ts";
@@ -99,6 +110,27 @@ export function assertRepo(repo: string): string {
   return repo;
 }
 
+const THREAD_ID_RE = /^[A-Za-z0-9_+=/:-]{1,200}$/;
+export function assertThreadId(id: string): string {
+  if (typeof id !== "string" || !THREAD_ID_RE.test(id)) throw new Error("invalid threadId");
+  return id;
+}
+
+/** Keep the trailing context lines (plus the leading @@ header) so long diffs stay compact. */
+export function trimDiffHunk(raw: string, maxLines = 8, maxLineLen = 500): string {
+  if (!raw) return "";
+  const lines = raw.split("\n");
+  let kept: string[];
+  if (lines.length > maxLines + 1 && lines[0].startsWith("@@")) {
+    kept = [lines[0], "…", ...lines.slice(-maxLines)];
+  } else if (lines.length > maxLines) {
+    kept = lines.slice(-maxLines);
+  } else {
+    kept = lines;
+  }
+  return kept.map((l) => (l.length > maxLineLen ? `${l.slice(0, maxLineLen)}…` : l)).join("\n");
+}
+
 const INBOX_QUERY = `query($q: String!) {
   search(query: $q, type: ISSUE, first: 50) {
     nodes {
@@ -108,6 +140,7 @@ const INBOX_QUERY = `query($q: String!) {
         repository { nameWithOwner }
         author { login }
         labels(first: 10) { nodes { name } }
+        reviewThreads(first: 100) { totalCount nodes { isResolved } }
         commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 0) {
           totalCount
           checkRunCountsByState { state count }
@@ -117,6 +150,50 @@ const INBOX_QUERY = `query($q: String!) {
     }
   }
 }`;
+
+const REVIEW_THREADS_QUERY = `query($owner: String!, $name: String!, $num: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $num) {
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id isResolved isOutdated path line originalLine startLine diffSide
+          viewerCanResolve viewerCanUnresolve viewerCanReply
+          resolvedBy { login }
+          comments(first: 50) {
+            nodes { id author { login } body createdAt url diffHunk }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+const RESOLVE_THREAD_MUTATION = `mutation($id: ID!) {
+  resolveReviewThread(input: { threadId: $id }) {
+    thread { id isResolved viewerCanResolve viewerCanUnresolve resolvedBy { login } }
+  }
+}`;
+
+const UNRESOLVE_THREAD_MUTATION = `mutation($id: ID!) {
+  unresolveReviewThread(input: { threadId: $id }) {
+    thread { id isResolved viewerCanResolve viewerCanUnresolve resolvedBy { login } }
+  }
+}`;
+
+const REPLY_THREAD_MUTATION = `mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) {
+    comment { id author { login } body createdAt url }
+  }
+}`;
+
+async function ghGraphql(args: string[]): Promise<Json> {
+  const raw = JSON.parse(await gh(["api", "graphql", ...args]));
+  if (raw.errors?.length) {
+    throw new Error(raw.errors.map((e: Json) => e?.message ?? String(e)).join("; "));
+  }
+  return raw;
+}
 
 const INBOX_QUALIFIER: Record<Exclude<InboxFilter, "all">, string> = {
   author: "author:@me",
@@ -162,6 +239,9 @@ function searchNodeToSummary(n: Json): PRSummary {
     changedFiles: n.changedFiles ?? 0,
     labels: (n.labels?.nodes ?? []).map((l: Json) => l.name),
     checks: rollupSummary(n.commits?.nodes?.[0]?.commit?.statusCheckRollup),
+    unresolvedThreads: n.reviewThreads
+      ? (n.reviewThreads.nodes ?? []).filter((t: Json) => t && !t.isResolved).length
+      : undefined,
     url: n.url,
   };
 }
@@ -169,7 +249,12 @@ function searchNodeToSummary(n: Json): PRSummary {
 export class GhCliHost implements CodeHost {
   private login?: Promise<string>;
   viewer(): Promise<string> {
-    this.login ??= gh(["api", "user", "--jq", ".login"]).then((s) => s.trim());
+    this.login ??= gh(["api", "user", "--jq", ".login"])
+      .then((s) => s.trim())
+      .catch((e) => {
+        this.login = undefined;
+        throw e;
+      });
     return this.login;
   }
 
@@ -201,11 +286,59 @@ export class GhCliHost implements CodeHost {
     });
   }
 
+  private async fetchReviewThreads(repo: string, num: number): Promise<ReviewThread[]> {
+    const [owner, name] = assertRepo(repo).split("/");
+    const threads: ReviewThread[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 5; page++) {
+      const args = ["-f", `owner=${owner}`, "-f", `name=${name}`, "-F", `num=${num}`, "-f", `query=${REVIEW_THREADS_QUERY}`];
+      if (cursor) args.push("-f", `cursor=${cursor}`);
+      const raw = await ghGraphql(args).catch(() => ghGraphql(args));
+      const conn = raw.data?.repository?.pullRequest?.reviewThreads;
+      if (!conn) break;
+      for (const n of conn.nodes ?? []) {
+        if (!n) continue;
+        const rawComments: Json[] = (n.comments?.nodes ?? []).filter(Boolean);
+        threads.push({
+          id: n.id,
+          isResolved: !!n.isResolved,
+          isOutdated: !!n.isOutdated,
+          path: n.path ?? "",
+          line: n.line ?? null,
+          startLine: n.startLine ?? null,
+          originalLine: n.originalLine ?? null,
+          diffSide: n.diffSide ?? "RIGHT",
+          diffHunk: trimDiffHunk(rawComments[0]?.diffHunk ?? ""),
+          resolvedBy: n.resolvedBy?.login || undefined,
+          viewerCanResolve: !!n.viewerCanResolve,
+          viewerCanUnresolve: !!n.viewerCanUnresolve,
+          viewerCanReply: !!n.viewerCanReply,
+          comments: rawComments.map((c) => ({
+            id: c.id,
+            author: c.author?.login ?? "ghost",
+            body: c.body ?? "",
+            createdAt: c.createdAt ?? "",
+            url: c.url ?? "",
+          })),
+        });
+      }
+      if (!conn.pageInfo?.hasNextPage || !conn.pageInfo?.endCursor) break;
+      cursor = conn.pageInfo.endCursor;
+    }
+    return threads;
+  }
+
   async getPR(repo: string, num: number): Promise<PRDetail> {
-    const raw = JSON.parse(await gh(["pr", "view", String(num), "-R", assertRepo(repo), "--json", DETAIL_FIELDS.join(",")]));
+    assertRepo(repo);
+    const [rawStr, reviewThreads] = await Promise.all([
+      gh(["pr", "view", String(num), "-R", repo, "--json", DETAIL_FIELDS.join(",")]),
+      this.fetchReviewThreads(repo, num),
+    ]);
+    const raw = JSON.parse(rawStr);
     const { _checks, ...s } = toSummary(raw);
     return {
       ...s,
+      unresolvedThreads: reviewThreads.filter((t) => !t.isResolved).length,
       body: raw.body ?? "",
       headRefOid: raw.headRefOid,
       baseRefOid: raw.baseRefOid,
@@ -219,11 +352,43 @@ export class GhCliHost implements CodeHost {
       })),
       checkList: _checks,
       reviews: (raw.latestReviews ?? []).map((r: Json) => ({ author: r.author?.login ?? "", state: r.state })),
+      reviewThreads,
     };
   }
 
   async getDiff(repo: string, num: number): Promise<string> {
     return gh(["pr", "diff", String(num), "-R", assertRepo(repo), "--color", "never"], 180_000);
+  }
+
+  async resolveThread(repo: string, _num: number, threadId: string, resolved: boolean): Promise<ResolveThreadResult> {
+    assertRepo(repo);
+    assertThreadId(threadId);
+    const mutation = resolved ? RESOLVE_THREAD_MUTATION : UNRESOLVE_THREAD_MUTATION;
+    const raw = await ghGraphql(["-f", `id=${threadId}`, "-f", `query=${mutation}`]);
+    const t = resolved ? raw.data?.resolveReviewThread?.thread : raw.data?.unresolveReviewThread?.thread;
+    if (!t) throw new Error("unexpected GraphQL response for thread resolve");
+    return {
+      isResolved: !!t.isResolved,
+      viewerCanResolve: !!t.viewerCanResolve,
+      viewerCanUnresolve: !!t.viewerCanUnresolve,
+      resolvedBy: t.resolvedBy?.login || undefined,
+    };
+  }
+
+  async replyToThread(repo: string, _num: number, threadId: string, body: string): Promise<ReviewComment> {
+    assertRepo(repo);
+    assertThreadId(threadId);
+    if (!body.trim()) throw new Error("reply body must not be empty");
+    const raw = await ghGraphql(["-f", `threadId=${threadId}`, "-f", `body=${body}`, "-f", `query=${REPLY_THREAD_MUTATION}`]);
+    const c = raw.data?.addPullRequestReviewThreadReply?.comment;
+    if (!c) throw new Error("unexpected GraphQL response for thread reply");
+    return {
+      id: c.id,
+      author: c.author?.login ?? "ghost",
+      body: c.body ?? "",
+      createdAt: c.createdAt ?? "",
+      url: c.url ?? "",
+    };
   }
 
   async merge(repo: string, num: number, req: MergeRequest): Promise<string> {

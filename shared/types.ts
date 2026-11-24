@@ -37,6 +37,7 @@ export interface PRSummary {
   changedFiles: number;
   labels: string[];
   checks: ChecksSummary;
+  unresolvedThreads?: number;
   url: string;
 }
 
@@ -62,6 +63,39 @@ export interface PRDetail extends PRSummary {
   commits: PRCommit[];
   checkList: Check[];
   reviews: { author: string; state: string }[];
+  reviewThreads: ReviewThread[];
+}
+
+export interface ReviewComment {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+export interface ReviewThread {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string;
+  line: number | null;
+  startLine: number | null;
+  originalLine: number | null;
+  diffSide: string;
+  diffHunk: string;
+  resolvedBy?: string;
+  viewerCanResolve: boolean;
+  viewerCanUnresolve: boolean;
+  viewerCanReply: boolean;
+  comments: ReviewComment[];
+}
+
+export interface ResolveThreadResult {
+  isResolved: boolean;
+  viewerCanResolve: boolean;
+  viewerCanUnresolve: boolean;
+  resolvedBy?: string;
 }
 
 export type MergeMethod = "squash" | "merge" | "rebase";

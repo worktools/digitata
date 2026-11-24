@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { programDiffLabel } from "../api.ts";
 import { useBusy } from "../store.ts";
 import type { FilePatch } from "./parse.ts";
@@ -51,10 +51,27 @@ export function rendererFor(file: FilePatch) {
   return renderers.find((r) => r.matches(file));
 }
 
-export const FileDiff = memo(function FileDiff({ file, ctx, defaultOpen }: { file: FilePatch; ctx: DiffContext; defaultOpen: boolean }) {
+export const FileDiff = memo(function FileDiff({
+  file,
+  ctx,
+  defaultOpen,
+  unresolvedCount,
+  forceOpen,
+  onOpenComments,
+}: {
+  file: FilePatch;
+  ctx: DiffContext;
+  defaultOpen: boolean;
+  unresolvedCount?: number;
+  forceOpen?: boolean;
+  onOpenComments?: (path: string) => void;
+}) {
   const special = rendererFor(file);
   const busy = useBusy(programDiffLabel(file.path));
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
   const [view, setView] = useState<string>(special ? special.id : "text");
   const [fallbackNote, setFallbackNote] = useState("");
   const fallback = useCallback((reason: string) => {
@@ -85,6 +102,19 @@ export const FileDiff = memo(function FileDiff({ file, ctx, defaultOpen }: { fil
           <span className="pill computing">
             <span className="spinner" /> 计算中
           </span>
+        )}
+        {(unresolvedCount ?? 0) > 0 && (
+          <button
+            type="button"
+            className="pill pending clickable-pill"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenComments?.(file.path);
+            }}
+            title={`查看 ${file.path} 的未解决评论`}
+          >
+            💬 {unresolvedCount} 未解决
+          </button>
         )}
         <span className="stat">
           <span className="add">+{file.additions}</span> <span className="del">−{file.deletions}</span>

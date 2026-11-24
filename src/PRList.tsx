@@ -148,13 +148,14 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
   const job = useMerges()[mergeKey(pr.repo ?? pr.url.split("/").slice(3, 5).join("/"), pr.number)];
   const st = prStatus(pr);
   const repoName = pr.repo?.split("/")[1];
+  const unresolved = pr.unresolvedThreads ?? 0;
   return (
     <li
       className={`row st-${st.kind} ${selected ? "sel" : ""} ${job?.state === "done" ? "leaving" : ""}`}
       onClick={onSelect}
       onMouseEnter={() => onHover && (timer.current = window.setTimeout(onHover, 150))}
       onMouseLeave={() => clearTimeout(timer.current)}
-      title={`${pr.repo ?? ""}#${pr.number} · ${st.label}${pr.author !== viewer ? ` · ${pr.author}` : ""}`}
+      title={`${pr.repo ?? ""}#${pr.number} · ${st.label}${unresolved > 0 ? ` · ${unresolved} 未解决评论` : ""}${pr.author !== viewer ? ` · ${pr.author}` : ""}`}
     >
       <div className="row1">
         <span className="title">{pr.title}</span>
@@ -168,6 +169,11 @@ export function PRRow(props: { pr: PRSummary; selected: boolean; onSelect: () =>
         {job?.state === "failed" && <span className="pill failed">合并失败</span>}
         {!job && st.kind !== "ready" && <span className={`pill ${st.kind}`}>{st.label}</span>}
         {pr.reviewDecision === "APPROVED" && <span className="pill ready">✓ approved</span>}
+        {unresolved > 0 && (
+          <span className="pill pending" title={`${unresolved} 条未解决的 review 评论`}>
+            💬 {unresolved}
+          </span>
+        )}
         <span className="stat">
           <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
         </span>

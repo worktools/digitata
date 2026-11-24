@@ -1,5 +1,13 @@
 import { prefetch } from "./store.ts";
-import type { InboxFilter, MergeRequest, PRDetail, PRSummary, ProgramDiffResult } from "../shared/types.ts";
+import type {
+  InboxFilter,
+  MergeRequest,
+  PRDetail,
+  PRSummary,
+  ProgramDiffResult,
+  ResolveThreadResult,
+  ReviewComment,
+} from "../shared/types.ts";
 
 async function req<T>(url: string, init?: RequestInit, as: "json" | "text" = "json"): Promise<T> {
   const r = await fetch(url, init);
@@ -30,13 +38,25 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
+  resolveThread: (repo: string, num: number, threadId: string, resolved: boolean) =>
+    req<ResolveThreadResult>(`${base(repo)}/${num}/threads/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ threadId, resolved }),
+    }),
+  replyToThread: (repo: string, num: number, threadId: string, body: string) =>
+    req<{ comment: ReviewComment }>(`${base(repo)}/${num}/threads/reply`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ threadId, body }),
+    }),
 };
 
 // Cache keys and fetch options shared by views and hover prefetch.
 export const q = {
   viewer: () => ({ key: "viewer", fetch: api.viewer, opts: { label: "账号", persist: true, immutable: true } }),
   inbox: (filter: InboxFilter, query: string) => ({
-    key: `inbox2:${filter}:${query}`,
+    key: `inbox3:${filter}:${query}`,
     fetch: () => api.inbox(filter, query),
     opts: { label: "待合并列表", persist: true, keepPrevious: true },
   }),
@@ -46,7 +66,7 @@ export const q = {
     opts: { label: `${repo} PR 列表`, persist: true, keepPrevious: true },
   }),
   pr: (repo: string, num: number) => ({
-    key: `pr:${repo}#${num}`,
+    key: `pr2:${repo}#${num}`,
     fetch: () => api.getPR(repo, num),
     opts: { label: `#${num} 详情`, persist: true },
   }),

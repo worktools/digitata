@@ -16,6 +16,28 @@
 
 需要 Node 24+（直接运行 `.ts`）、`gh`（已 `gh auth login`）、`calcit`（program diff 用）。
 
+### 命令行工具（推荐）
+
+仓库内提供了封装命令 [bin/digitata](bin/digitata)，会自动查找本机 Node 24+（即使当前 shell 默认 `node` 版本较低）并在缺少构建产物时自动执行 `yarn build`：
+
+```bash
+ln -sf "$PWD/bin/digitata" ~/.local/bin/digitata
+
+digitata            # 前台启动（http://127.0.0.1:7741）
+digitata up         # 后台启动（daemon），日志写入 ~/.cache/digitata/server-7741.log
+digitata status     # 查看运行状态
+digitata restart    # 重启后台服务
+digitata stop       # 停止后台服务
+digitata logs -f    # 查看/跟踪后台日志
+digitata dev        # 开发模式（API :7741 + Vite :5741）
+digitata build      # 仅重新构建前端产物
+digitata open       # 在浏览器中打开页面
+```
+
+常用参数：`-p <port>` / `--port <port>` 指定端口、`-b` / `--build` 启动前重新构建、`-o` / `--open` 启动后自动打开浏览器。
+
+### 直接通过 Yarn 运行
+
 ```bash
 yarn install
 yarn dev     # API :7741 + Vite :5741，打开 http://localhost:5741
@@ -24,8 +46,7 @@ yarn start   # 构建后由 API 服务一并托管页面，打开 http://localho
 
 地址格式：`#/<owner>/<repo>/<PR 号>`，例如 `http://localhost:7741/#/calcit-lang/calcit/2685`。
 
-环境变量：`DIGITATA_PORT`（默认 7741）、
-`DIGITATA_CALCIT`（calcit 可执行文件，默认 `calcit`）。
+环境变量：`DIGITATA_PORT`（默认 7741）、`DIGITATA_NODE`（显式指定 Node 24+ 路径）、`DIGITATA_CALCIT`（calcit 可执行文件，默认 `calcit`）、`DIGITATA_LOG`（后台日志路径）。
 
 ## 结构
 
@@ -56,8 +77,14 @@ CLI 报告的 schema widening 会在顶部给出警告。代码里的类型标�
 
 ## 合并
 
-合并前弹确认框，显示 CI 状态、mergeable / mergeStateStatus、review 结论；CI 失败、运行中、有冲突或草稿时需要额外勾选确认。
+合并前弹确认框，显示 CI 状态、mergeable / mergeStateStatus、review 结论与未解决评论数；CI 失败、运行中、有冲突、未解决评论或草稿时需要额外勾选确认。
 键盘：PR 页按 `M` 打开确认框；框内 `Enter` 合并、`Esc` 取消、`1`/`2`/`3` 选方式、`D` 切换删除分支、`A` 确认警告。
 合并在后台任务里执行：确认后对话框立即关闭，可以马上切到别的 PR；列表上该 PR 显示“合并中 / 已合并 / 合并失败”，结果在右下角提示，完成后列表自动刷新。
 测试用：`DIGITATA_DRY_MERGE=1` 启动的服务不会调用 GitHub，合并请求等 5 秒后返回失败；`DIGITATA_DRY_MERGE=ok` 则假装成功。
 合并请求带上页面看到的 head SHA（`gh pr merge --match-head-commit`），PR 在此之后有新提交会被拒绝。
+
+## 未解决评论（Review Threads）
+
+- 侧栏待合并列表、PR 顶栏与文件列表会显示未解决的 review 评论数量（点击文件标题上的气泡或顶栏气泡可跳转到对应评论）。
+- PR 详情页新增「评论」标签页：默认筛选未解决线程，支持切换到已解决/全部或按单个文件筛选，并展示代码上下文（diff hunk）和折叠后的详情/代码块（带一键复制）。
+- 支持对线程直接 **回复**、**Resolve / Unresolve** 或 **回复并 Resolve**（通过 `gh api graphql` 调用 GitHub GraphQL mutation），状态会即时同步到缓存和侧栏计数。

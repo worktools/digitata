@@ -2,7 +2,7 @@
 // gh CLI (server/gh.ts); a direct REST/GraphQL implementation can replace it
 // without touching the routes or the UI.
 
-import type { InboxFilter, MergeRequest, PRDetail, PRSummary } from "../shared/types.ts";
+import type { InboxFilter, MergeRequest, PRDetail, PRSummary, ResolveThreadResult, ReviewComment } from "../shared/types.ts";
 
 export interface ListOptions {
   state?: "open" | "closed" | "merged" | "all";
@@ -20,4 +20,6 @@ export interface CodeHost {
   /** Unified diff (git patch format) of the whole PR. */
   getDiff(repo: string, num: number): Promise<string>;
   merge(repo: string, num: number, req: MergeRequest): Promise<string>;
+  resolveThread(repo: string, num: number, threadId: string, resolved: boolean): Promise<ResolveThreadResult>;
+  replyToThread(repo: string, num: number, threadId: string, body: string): Promise<ReviewComment>;
 }

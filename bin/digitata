@@ -1,0 +1,484 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve real repository root even when invoked through a symlink (portable on macOS).
+SRC="${BASH_SOURCE[0]}"
+while [ -L "$SRC" ]; do
+  DIR="$(cd -P "$(dirname "$SRC")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink "$SRC")"
+  case "$TARGET" in
+    /*) SRC="$TARGET" ;;
+    *) SRC="$DIR/$TARGET" ;;
+  esac
+done
+BIN_DIR="$(cd -P "$(dirname "$SRC")" >/dev/null 2>&1 && pwd)"
+ROOT_DIR="$(cd -P "$BIN_DIR/.." >/dev/null 2>&1 && pwd)"
+
+# Ensure common user/Homebrew/system tool directories are reachable in minimal shells.
+for d in "$HOME/.cargo/bin" "/opt/homebrew/bin" "/usr/local/bin" "/usr/sbin" "/sbin"; do
+  if [ -d "$d" ]; then
+    case ":$PATH:" in
+      *":$d:"*) ;;
+      *) PATH="$PATH:$d" ;;
+    esac
+  fi
+done
+export PATH
+
+usage() {
+  cat <<'EOF'
+Usage: digitata [command] [options]
+
+Commands:
+  start      Start digitata in foreground (default)
+  up         Start digitata in background (daemon; alias: daemon)
+  stop       Stop background digitata server
+  restart    Restart background digitata server
+  status     Show running status on the selected port
+  logs       Show background server logs (-f to follow)
+  dev        Start API + Vite dev server (`yarn dev`)
+  build      Build frontend bundle (`yarn build`)
+  open       Open digitata URL in browser
+  help       Show this help
+
+Options:
+  -p, --port <port>   Port to listen on (default: DIGITATA_PORT or 7741)
+  -b, --build         Run `yarn build` before starting
+  -o, --open          Open http://127.0.0.1:<port> in browser
+  -f, --follow        Follow log output (with `logs`)
+  -h, --help          Show this help
+
+Environment:
+  DIGITATA_PORT       Default port (7741)
+  DIGITATA_NODE       Explicit Node.js 24+ binary path
+  DIGITATA_CALCIT     calcit binary path (defaults to `calcit` in PATH)
+  DIGITATA_LOG        Override background log file path
+EOF
+}
+
+node_semver() {
+  "$1" -p 'process.versions.node' 2>/dev/null || true
+}
+
+parse_ver_parts() {
+  local v="${1#v}"
+  local maj min pat
+  IFS=. read -r maj min pat <<EOF
+$v
+EOF
+  maj="${maj%%[!0-9]*}"
+  min="${min%%[!0-9]*}"
+  pat="${pat%%[!0-9]*}"
+  echo "${maj:-0} ${min:-0} ${pat:-0}"
+}
+
+ver_gt() {
+  local a1 a2 a3 b1 b2 b3
+  read -r a1 a2 a3 <<EOF
+$(parse_ver_parts "$1")
+EOF
+  read -r b1 b2 b3 <<EOF
+$(parse_ver_parts "$2")
+EOF
+  if [ "$a1" -ne "$b1" ]; then
+    [ "$a1" -gt "$b1" ]
+    return
+  fi
+  if [ "$a2" -ne "$b2" ]; then
+    [ "$a2" -gt "$b2" ]
+    return
+  fi
+  [ "$a3" -gt "$b3" ]
+}
+
+NODE_BIN=""
+NODE_VERSION=""
+
+find_node() {
+  local ver maj min pat
+  if [ -n "${DIGITATA_NODE:-}" ]; then
+    if [ ! -x "$DIGITATA_NODE" ]; then
+      echo "error: DIGITATA_NODE='$DIGITATA_NODE' is not executable" >&2
+      exit 1
+    fi
+    ver="$(node_semver "$DIGITATA_NODE")"
+    read -r maj min pat <<EOF
+$(parse_ver_parts "$ver")
+EOF
+    if [ "$maj" -lt 24 ]; then
+      echo "error: DIGITATA_NODE='$DIGITATA_NODE' is v$ver, Node 24+ is required" >&2
+      exit 1
+    fi
+    NODE_BIN="$DIGITATA_NODE"
+    NODE_VERSION="$ver"
+    PATH="$(dirname "$NODE_BIN"):$PATH"
+    export PATH
+    return 0
+  fi
+
+  local current
+  current="$(command -v node 2>/dev/null || true)"
+  if [ -n "$current" ] && [ -x "$current" ]; then
+    ver="$(node_semver "$current")"
+    read -r maj min pat <<EOF
+$(parse_ver_parts "$ver")
+EOF
+    if [ "$maj" -ge 24 ]; then
+      NODE_BIN="$current"
+      NODE_VERSION="$ver"
+      PATH="$(dirname "$NODE_BIN"):$PATH"
+      export PATH
+      return 0
+    fi
+  fi
+
+  local best_bin="" best_ver="0.0.0" cand
+  local fnm_root="${FNM_DIR:-$HOME/Library/Application Support/fnm}"
+  for cand in \
+    "$fnm_root"/node-versions/v*/installation/bin/node \
+    "$HOME/.local/share/fnm"/node-versions/v*/installation/bin/node \
+    "$HOME/.nvm/versions/node"/v*/bin/node \
+    "/opt/homebrew/bin/node" \
+    "/usr/local/bin/node"
+  do
+    [ -x "$cand" ] || continue
+    ver="$(node_semver "$cand")"
+    [ -n "$ver" ] || continue
+    read -r maj min pat <<EOF
+$(parse_ver_parts "$ver")
+EOF
+    [ "$maj" -ge 24 ] || continue
+    if [ -z "$best_bin" ] || ver_gt "$ver" "$best_ver"; then
+      best_bin="$cand"
+      best_ver="$ver"
+    fi
+  done
+
+  if [ -z "$best_bin" ]; then
+    echo "error: Node.js 24+ is required to run digitata (set DIGITATA_NODE or install Node 24+)" >&2
+    exit 1
+  fi
+
+  NODE_BIN="$best_bin"
+  NODE_VERSION="$best_ver"
+  PATH="$(dirname "$NODE_BIN"):$PATH"
+  export PATH
+}
+
+check_calcit_env() {
+  if [ -n "${DIGITATA_CALCIT:-}" ] && [ ! -x "$DIGITATA_CALCIT" ]; then
+    echo "warning: DIGITATA_CALCIT='$DIGITATA_CALCIT' is not executable; program-diff may fall back to text diff" >&2
+  fi
+}
+
+CMD=""
+PORT="${DIGITATA_PORT:-7741}"
+DO_BUILD=0
+DO_OPEN=0
+FOLLOW=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p|--port)
+      if [ $# -lt 2 ]; then
+        echo "error: $1 requires a port number" >&2
+        exit 2
+      fi
+      PORT="$2"
+      shift 2
+      ;;
+    --port=*)
+      PORT="${1#--port=}"
+      shift
+      ;;
+    -b|--build)
+      DO_BUILD=1
+      shift
+      ;;
+    -o|--open)
+      DO_OPEN=1
+      shift
+      ;;
+    -f|--follow)
+      FOLLOW=1
+      shift
+      ;;
+    -h|--help)
+      CMD="help"
+      shift
+      ;;
+    -*)
+      echo "error: unknown option '$1'" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [ -z "$CMD" ]; then
+        CMD="$1"
+      else
+        echo "error: unexpected argument '$1'" >&2
+        usage >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+[ -n "$CMD" ] || CMD="start"
+
+case "$PORT" in
+  ''|*[!0-9]*)
+    echo "error: invalid port '$PORT'" >&2
+    exit 2
+    ;;
+esac
+
+STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/digitata"
+PID_FILE="$STATE_DIR/digitata-$PORT.pid"
+LOG_FILE="${DIGITATA_LOG:-$STATE_DIR/server-$PORT.log}"
+URL="http://127.0.0.1:$PORT"
+
+port_pid() {
+  lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -n 1 || true
+}
+
+pid_alive() {
+  [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null
+}
+
+listener_pid() {
+  local pid
+  pid="$(port_pid)"
+  if [ -n "$pid" ]; then
+    echo "$pid"
+    return 0
+  fi
+  if [ -f "$PID_FILE" ]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if pid_alive "$pid"; then
+      echo "$pid"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+is_digitata_pid() {
+  local cmdline
+  cmdline="$(ps -p "$1" -o command= 2>/dev/null || true)"
+  case "$cmdline" in
+    *server/main.ts*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+open_url() {
+  local target="$1"
+  if command -v open >/dev/null 2>&1; then
+    open "$target" >/dev/null 2>&1 || true
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$target" >/dev/null 2>&1 || true
+  else
+    echo "Open in browser: $target"
+  fi
+}
+
+ensure_build() {
+  if [ "$DO_BUILD" -eq 1 ] || [ ! -f "$ROOT_DIR/dist/index.html" ]; then
+    echo "Building frontend in $ROOT_DIR..."
+    (cd "$ROOT_DIR" && yarn build)
+  fi
+}
+
+cmd_start() {
+  find_node
+  check_calcit_env
+  local existing
+  existing="$(port_pid)"
+  if [ -n "$existing" ]; then
+    echo "error: port $PORT is already in use (PID $existing) at $URL" >&2
+    echo "Run 'digitata -p $PORT restart' or 'digitata -p $PORT stop'." >&2
+    exit 1
+  fi
+  ensure_build
+  if [ "$DO_OPEN" -eq 1 ]; then
+    (
+      i=0
+      while [ "$i" -lt 30 ]; do
+        if [ -n "$(port_pid)" ]; then
+          open_url "$URL"
+          exit 0
+        fi
+        sleep 0.1
+        i=$((i + 1))
+      done
+    ) >/dev/null 2>&1 &
+  fi
+  echo "Starting digitata (Node v$NODE_VERSION) at $URL"
+  cd "$ROOT_DIR"
+  exec env DIGITATA_PORT="$PORT" "$NODE_BIN" server/main.ts
+}
+
+cmd_up() {
+  find_node
+  check_calcit_env
+  local existing
+  existing="$(port_pid)"
+  if [ -n "$existing" ]; then
+    if is_digitata_pid "$existing"; then
+      echo "digitata is already running (PID $existing) at $URL"
+      if [ "$DO_OPEN" -eq 1 ]; then
+        open_url "$URL"
+      fi
+      return 0
+    fi
+    echo "error: port $PORT is occupied by another process (PID $existing)" >&2
+    exit 1
+  fi
+
+  ensure_build
+  mkdir -p "$STATE_DIR"
+  printf '=== digitata start %s (port %s) ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PORT" >> "$LOG_FILE"
+  (
+    cd "$ROOT_DIR"
+    nohup env DIGITATA_PORT="$PORT" "$NODE_BIN" server/main.ts >> "$LOG_FILE" 2>&1 < /dev/null &
+    echo $! > "$PID_FILE"
+  )
+
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  local i=0 listen_pid=""
+  while [ "$i" -lt 30 ]; do
+    if ! pid_alive "$pid"; then
+      echo "error: digitata exited during startup; recent log:" >&2
+      tail -n 20 "$LOG_FILE" >&2 || true
+      rm -f "$PID_FILE"
+      exit 1
+    fi
+    listen_pid="$(port_pid)"
+    if [ -n "$listen_pid" ]; then
+      break
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  if [ -z "$listen_pid" ]; then
+    echo "error: digitata (PID $pid) did not start listening on port $PORT; recent log:" >&2
+    tail -n 20 "$LOG_FILE" >&2 || true
+    exit 1
+  fi
+
+  echo "digitata started (PID $listen_pid, Node v$NODE_VERSION) at $URL"
+  echo "log: $LOG_FILE"
+  if [ "$DO_OPEN" -eq 1 ]; then
+    open_url "$URL"
+  fi
+}
+
+cmd_stop() {
+  local pid=""
+  pid="$(listener_pid || true)"
+  if [ -z "$pid" ]; then
+    rm -f "$PID_FILE"
+    echo "digitata is not running on port $PORT"
+    return 0
+  fi
+
+  if ! is_digitata_pid "$pid"; then
+    local cmdline
+    cmdline="$(ps -p "$pid" -o command= 2>/dev/null || echo "unknown")"
+    echo "error: refusing to stop PID $pid on port $PORT (not digitata: $cmdline)" >&2
+    exit 1
+  fi
+
+  kill -TERM "$pid" 2>/dev/null || true
+  local i=0
+  while [ "$i" -lt 30 ]; do
+    if ! pid_alive "$pid"; then
+      rm -f "$PID_FILE"
+      echo "Stopped digitata (PID $pid) on port $PORT"
+      return 0
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill -KILL "$pid" 2>/dev/null || true
+  sleep 0.1
+  rm -f "$PID_FILE"
+  echo "Stopped digitata (PID $pid, SIGKILL) on port $PORT"
+}
+
+cmd_status() {
+  local pid=""
+  pid="$(listener_pid || true)"
+  if [ -n "$pid" ]; then
+    local cmdline
+    cmdline="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if is_digitata_pid "$pid"; then
+      local node_info=""
+      if find_node_quiet; then
+        node_info=", Node v$NODE_VERSION"
+      fi
+      echo "digitata is running (PID $pid$node_info) at $URL"
+      echo "log: $LOG_FILE"
+      return 0
+    fi
+    echo "port $PORT is occupied by another process (PID $pid: $cmdline)"
+    return 1
+  fi
+  echo "digitata is not running on port $PORT"
+  return 1
+}
+
+find_node_quiet() {
+  (find_node) >/dev/null 2>&1 || return 1
+  find_node
+}
+
+cmd_logs() {
+  if [ ! -f "$LOG_FILE" ]; then
+    echo "no log file at $LOG_FILE" >&2
+    exit 1
+  fi
+  if [ "$FOLLOW" -eq 1 ]; then
+    exec tail -f "$LOG_FILE"
+  fi
+  tail -n 50 "$LOG_FILE"
+}
+
+cmd_dev() {
+  find_node
+  check_calcit_env
+  cd "$ROOT_DIR"
+  exec env DIGITATA_PORT="$PORT" yarn dev
+}
+
+cmd_build() {
+  find_node
+  cd "$ROOT_DIR"
+  yarn build
+}
+
+case "$CMD" in
+  start) cmd_start ;;
+  up|daemon) cmd_up ;;
+  stop) cmd_stop ;;
+  restart)
+    cmd_stop
+    cmd_up
+    ;;
+  status) cmd_status ;;
+  logs) cmd_logs ;;
+  dev) cmd_dev ;;
+  build) cmd_build ;;
+  open) open_url "$URL" ;;
+  help) usage ;;
+  *)
+    echo "error: unknown command '$CMD'" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
